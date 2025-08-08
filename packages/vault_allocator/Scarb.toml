@@ -1,0 +1,38 @@
+[package]
+name = "vault_allocator"
+version.workspace = true
+edition.workspace = true
+cairo-version.workspace = true
+scarb-version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license-file.workspace = true
+
+[tool]
+fmt.workspace = true
+
+[[tool.snforge.fork]]
+name = "MAINNET"
+url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+block_id.tag = "latest"
+
+
+
+[dependencies]
+starknet.workspace = true
+openzeppelin.workspace = true
+alexandria_math.workspace = true
+
+[dev-dependencies]
+snforge_std.workspace = true
+
+
+[lib]
+
+[[target.starknet-contract]]
+allowed-libfuncs-list.name = "experimental"
+sierra = true
+casm = true
+casm-add-pythonic-hints = true

@@ -1,0 +1,60 @@
+[workspace]
+members = [
+    "packages/vault_allocator",
+]
+
+[package]
+name = "starknet_vault_kit"
+readme = "README.md"
+version.workspace = true
+keywords.workspace = true
+edition.workspace = true
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024_07"
+cairo-version = "2.12.0"
+scarb-version = "2.12.0"
+authors = ["ForgeYields <forge.fi.contact@gmail.com>"]
+description = "Standard vault infrastructure for Starknet"
+documentation = ""
+repository = "https://github.com/ForgeYields/starknet_vault_kit"
+license-file = "LICENSE"
+keywords = [
+    "starknet",
+    "yield",
+]
+
+[workspace.dependencies]
+starknet = "2.12.0"
+openzeppelin = "2.0.0"
+snforge_std = "0.48.0"
+alexandria_math = "0.6.0"
+
+
+[dependencies]
+starknet.workspace = true
+vault_allocator = { path = "packages/vault_allocator" }
+
+
+[dev-dependencies]
+snforge_std.workspace = true
+
+[lib]
+
+[[target.starknet-contract]]
+allowed-libfuncs-list.name = "experimental"
+sierra = true
+casm = false
+
+[workspace.tool.fmt]
+sort-module-level-items = true
+
+[tool]
+fmt.workspace = true
+
+
+[profile.dev.cairo]
+unstable-add-statements-functions-debug-info = true
+unstable-add-statements-code-locations-debug-info = true
+inlining-strategy= "avoid"

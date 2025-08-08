@@ -1,0 +1,60 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Starknet Vault Kit
+// Licensed under the MIT License. See LICENSE file for details.
+
+#[starknet::contract]
+pub mod SimpleDecoderAndSanitizer {
+    use vault_allocator::decoders_and_sanitizers::base_decoder_and_sanitizer::BaseDecoderAndSanitizerComponent;
+    use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::erc4626_decoder_and_sanitizer::Erc4626DecoderAndSanitizerComponent;
+    use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::vesu_decoder_and_sanitizer::VesuDecoderAndSanitizerComponent;
+
+    component!(
+        path: BaseDecoderAndSanitizerComponent,
+        storage: base_decoder_and_sanitizer,
+        event: BaseDecoderAndSanitizerEvent,
+    );
+    component!(
+        path: Erc4626DecoderAndSanitizerComponent,
+        storage: erc4626_decoder_and_sanitizer,
+        event: Erc4626DecoderAndSanitizerEvent,
+    );
+
+    component!(
+        path: VesuDecoderAndSanitizerComponent,
+        storage: vesu_decoder_and_sanitizer,
+        event: VesuDecoderAndSanitizerEvent,
+    );
+
+    #[abi(embed_v0)]
+    impl BaseDecoderAndSanitizerImpl =
+        BaseDecoderAndSanitizerComponent::BaseDecoderAndSanitizerImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl Erc4626DecoderAndSanitizerImpl =
+        Erc4626DecoderAndSanitizerComponent::Erc4626DecoderAndSanitizerImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl VesuDecoderAndSanitizerImpl =
+        VesuDecoderAndSanitizerComponent::VesuDecoderAndSanitizerImpl<ContractState>;
+
+    #[storage]
+    pub struct Storage {
+        #[substorage(v0)]
+        pub base_decoder_and_sanitizer: BaseDecoderAndSanitizerComponent::Storage,
+        #[substorage(v0)]
+        pub erc4626_decoder_and_sanitizer: Erc4626DecoderAndSanitizerComponent::Storage,
+        #[substorage(v0)]
+        pub vesu_decoder_and_sanitizer: VesuDecoderAndSanitizerComponent::Storage,
+    }
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        #[flat]
+        BaseDecoderAndSanitizerEvent: BaseDecoderAndSanitizerComponent::Event,
+        #[flat]
+        Erc4626DecoderAndSanitizerEvent: Erc4626DecoderAndSanitizerComponent::Event,
+        #[flat]
+        VesuDecoderAndSanitizerEvent: VesuDecoderAndSanitizerComponent::Event,
+    }
+}
