@@ -5,19 +5,16 @@
 use openzeppelin::access::accesscontrol::interface::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
-use openzeppelin::access::ownable::interface::{IOwnableDispatcher, IOwnableDispatcherTrait};
 use openzeppelin::security::interface::{IPausableDispatcher, IPausableDispatcherTrait};
 use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use openzeppelin::upgrades::interface::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
-use starknet::ContractAddress;
-use starknet::account::Call;
 use vault_allocator::manager::interface::{IManagerDispatcher, IManagerDispatcherTrait};
 use vault_allocator::manager::manager::Manager::{OWNER_ROLE, PAUSER_ROLE};
 use vault_allocator::mocks::counter::{ICounterDispatcher, ICounterDispatcherTrait};
 use vault_allocator::test::utils::{
-    DUMMY_ADDRESS, MANAGER, ManageLeaf, OWNER, STRATEGIST, WAD, _add_erc4626_leafs,
-    _get_proofs_using_tree, _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_counter,
-    deploy_erc20_mock, deploy_erc4626_mock, deploy_manager, deploy_simple_decoder_and_sanitizer,
+    DUMMY_ADDRESS, ManageLeaf, OWNER, STRATEGIST, WAD, _add_erc4626_leafs, _get_proofs_using_tree,
+    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_counter, deploy_erc20_mock,
+    deploy_erc4626_mock, deploy_manager, deploy_simple_decoder_and_sanitizer,
     deploy_vault_allocator, generate_merkle_tree,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
@@ -65,7 +62,7 @@ fn test_set_manage_root() {
     let vault_allocator = deploy_vault_allocator();
     let manager = deploy_manager(vault_allocator);
 
-    let target = starknet::contract_address_const::<0x123>();
+    let target = 0x123.try_into().unwrap();
     let root = 0x456;
 
     cheat_caller_address_once(manager.contract_address, OWNER());
@@ -81,7 +78,7 @@ fn test_set_manage_root_not_owner() {
     let vault_allocator = deploy_vault_allocator();
     let manager = deploy_manager(vault_allocator);
 
-    let target = starknet::contract_address_const::<0x123>();
+    let target = 0x123.try_into().unwrap();
     let root = 0x456;
 
     manager.set_manage_root(target, root);
