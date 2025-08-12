@@ -1,1 +1,1 @@
-pub use vault_allocator;
+pub use {vault, vault_allocator};

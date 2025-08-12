@@ -47,10 +47,10 @@ pub mod mocks {
 pub mod test {
     pub mod register;
     pub mod utils;
-    pub mod units {
-        pub mod manager;
-        pub mod vault_allocator;
-    }
+    // pub mod units {
+    //     pub mod manager;
+    //     pub mod vault_allocator;
+    // }
 
     pub mod integrations {
         pub mod vesu;

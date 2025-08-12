@@ -145,6 +145,17 @@ name = "starknet_vault_kit"
 version = "0.1.0"
 dependencies = [
  "snforge_std",
+ "vault",
+ "vault_allocator",
+]
+
+[[package]]
+name = "vault"
+version = "0.1.0"
+dependencies = [
+ "alexandria_math",
+ "openzeppelin",
+ "snforge_std",
  "vault_allocator",
 ]
 

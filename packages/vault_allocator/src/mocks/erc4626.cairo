@@ -40,6 +40,7 @@ pub mod Erc4626Mock {
         ERC4626Event: ERC4626Component::Event,
     }
 
+
     #[constructor]
     fn constructor(ref self: ContractState, underlying: ContractAddress) {
         self.erc20.initializer("mock", "mc");

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "packages/vault_allocator",
+    "packages/vault"
 ]
 
 [package]
@@ -35,7 +36,7 @@ alexandria_math = "0.6.0"
 [dependencies]
 starknet.workspace = true
 vault_allocator = { path = "packages/vault_allocator" }
-
+vault = { path = "packages/vault" }
 
 [dev-dependencies]
 snforge_std.workspace = true
