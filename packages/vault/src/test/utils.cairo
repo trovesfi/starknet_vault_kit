@@ -64,6 +64,9 @@ pub fn REPORT_DELAY() -> u64 {
     Vault::HOUR
 }
 
+pub fn MAX_DELTA() -> u256 {
+    Vault::WAD / 100
+}
 
 pub fn deploy_vault(underlying_asset: ContractAddress) -> IVaultDispatcher {
     let vault = declare("Vault").unwrap().contract_class();
@@ -77,6 +80,7 @@ pub fn deploy_vault(underlying_asset: ContractAddress) -> IVaultDispatcher {
     MANAGEMENT_FEES().serialize(ref calldata);
     PERFORMANCE_FEES().serialize(ref calldata);
     REPORT_DELAY().serialize(ref calldata);
+    MAX_DELTA().serialize(ref calldata);
     let (vault_allocator_address, _) = vault.deploy(@calldata).unwrap();
     IVaultDispatcher { contract_address: vault_allocator_address }
 }

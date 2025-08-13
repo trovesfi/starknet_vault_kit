@@ -157,7 +157,8 @@ pub mod Vault {
         PausableEvent: PausableComponent::Event,
         // Vault-specific events
         RedeemRequested: RedeemRequested, // Emitted when a redemption is requested
-        RedeemClaimed: RedeemClaimed // Emitted when a redemption is claimed
+        RedeemClaimed: RedeemClaimed, // Emitted when a redemption is claimed
+        Report: Report // Emitted when oracle reports new AUM
     }
 
     /// Event emitted when a user requests a redemption
@@ -181,6 +182,17 @@ pub mod Vault {
         pub epoch: u256 // Epoch when redemption was originally requested
     }
 
+    /// Event emitted when oracle reports new AUM
+    #[derive(Drop, starknet::Event)]
+    pub struct Report {
+        pub new_epoch: u256, // Epoch that was processed
+        pub new_handled_epoch_len: u256, // Number of epochs that are now fully handled
+        pub total_supply: u256, // Total supply of shares
+        pub total_assets: u256, // Total assets under management
+        pub management_fee_shares: u256, // Management fee shares minted
+        pub performance_fee_shares: u256 // Performance fee shares minted
+    }
+
     /// Initialize the vault with configuration parameters
     /// Sets up all components, roles, and fee structure
     #[constructor]
@@ -194,7 +206,8 @@ pub mod Vault {
         redeem_fees: u256, // Redemption fee rate in WAD
         management_fees: u256, // Annual management fee rate in WAD
         performance_fees: u256, // Performance fee rate in WAD
-        report_delay: u64 // Minimum delay between reports for redemption processing
+        report_delay: u64, // Minimum delay between reports for redemption processing
+        max_delta: u256 // Maximum allowed AUM change per report in WAD
     ) {
         // Initialize all components
         self.erc20.initializer(name, symbol);
@@ -219,6 +232,9 @@ pub mod Vault {
 
         // Set redeem delay
         self._set_report_delay(report_delay);
+
+        // Set max delta
+        self._set_max_delta(max_delta);
 
         // Initialize timestamp for fee calculations
         self.last_report_timestamp.write(get_block_timestamp());
@@ -393,6 +409,13 @@ pub mod Vault {
             self._set_report_delay(report_delay);
         }
 
+        /// Set the maximum allowed AUM change per report
+        /// Only callable by owner to prevent unauthorized changes
+        fn set_max_delta(ref self: ContractState, max_delta: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE); // Only owner can update max delta
+            self._set_max_delta(max_delta);
+        }
+
         // --- Emergency Controls ---
 
         /// Pause vault operations (deposits and redemptions)
@@ -455,6 +478,7 @@ pub mod Vault {
 
             // Convert remaining shares to assets for redemption
             let assets = self.erc4626._convert_to_assets(remaining_shares, Rounding::Floor);
+
             if (assets.is_zero()) {
                 Errors::zero_assets(); // Prevent zero-asset redemptions
             }
@@ -462,7 +486,9 @@ pub mod Vault {
 
             // Record redemption request in current epoch
             let epoch = self.epoch.read();
-            self.redeem_nominal.write(epoch, self.redeem_nominal.read(epoch) + assets);
+            let new_redeem_epoch_nominal = self.redeem_nominal.read(epoch) + assets;
+            self.redeem_nominal.write(epoch, new_redeem_epoch_nominal);
+            self.redeem_assets.write(epoch, new_redeem_epoch_nominal);
 
             // Mint NFT representing the redemption claim
             let id = self
@@ -479,6 +505,8 @@ pub mod Vault {
         fn claim_redeem(
             ref self: ContractState, id: u256,
         ) -> u256 { // Returns actual assets received
+            self.pausable.assert_not_paused(); // Prevent claiming redemptions when paused
+
             let redeem_request_disp = self.redeem_request.read();
             let erc721_disp = ERC721ABIDispatcher {
                 contract_address: redeem_request_disp.contract_address,
@@ -530,6 +558,7 @@ pub mod Vault {
         /// Process epoch and report new AUM from external allocators
         /// This is the core function that handles fees, losses, and epoch transitions
         fn report(ref self: ContractState, new_aum: u256) { // New assets under management value
+            self.pausable.assert_not_paused(); // Prevent reporting when paused
             self.access_control.assert_only_role(ORACLE_ROLE); // Only oracle can report AUM
 
             // Check redeem delay constraint
@@ -542,12 +571,9 @@ pub mod Vault {
 
             let epoch = self.epoch.read();
 
-            // 1) Initialize redemption assets for current epoch (1:1 with nominal initially)
-            self.redeem_assets.write(epoch, self.redeem_nominal.read(epoch));
-
             let prev_aum = self.aum.read();
 
-            // 2) Validate AUM change is within acceptable bounds
+            // 1) Validate AUM change is within acceptable bounds
             if (prev_aum.is_non_zero()) {
                 let abs_diff = if (new_aum >= prev_aum) {
                     new_aum - prev_aum
@@ -562,6 +588,8 @@ pub mod Vault {
                 if (delta_ratio_wad > self.max_delta.read()) {
                     Errors::aum_delta_too_high(delta_ratio_wad, self.max_delta.read());
                 }
+            } else if (new_aum.is_non_zero()) {
+                Errors::invalid_new_aum(new_aum);
             }
 
             let buffer = self.buffer.read();
@@ -571,7 +599,7 @@ pub mod Vault {
                 Errors::liquidity_is_zero(); // Cannot process without liquidity
             }
 
-            // 3) Apply market losses proportionally to redemptions
+            // 2) Apply market losses proportionally to redemptions
             let market_loss_assets = if (new_aum < prev_aum) {
                 prev_aum - new_aum // Loss from market/strategy performance
             } else {
@@ -583,54 +611,63 @@ pub mod Vault {
 
             let liquidity_after = new_aum + buffer; // Liquidity after market losses
 
-            // 4) Calculate and apply management fees
+            // 3) Calculate and apply management fees
             let dt: u64 = get_block_timestamp() - self.last_report_timestamp.read();
             // Annual fee formula: (fee_rate * time_elapsed * liquidity) / (seconds_per_year * 1e18)
-            let mgmt_fee_assets = (self.management_fees.read() * (dt.into()) * liquidity_after)
+            let management_fee_assets = (self.management_fees.read()
+                * (dt.into())
+                * liquidity_after)
                 / (YEAR.into() * WAD);
 
             let total_redeem_assets_after_mgmt_cut = self
-                ._apply_loss_on_redeems(mgmt_fee_assets, liquidity_after);
+                ._apply_loss_on_redeems(management_fee_assets, liquidity_after);
 
             // Management fee allocated to shareholders vs redemptions
-            let mgmt_shareholders = mgmt_fee_assets
+            let management_fee_assets_for_shareholders = management_fee_assets
                 - (total_redeem_assets_after_loss_cut - total_redeem_assets_after_mgmt_cut);
 
-            // 5) Calculate performance fees on net profit
-            let net_profit_after_mgmt = if (new_aum > prev_aum + mgmt_shareholders) {
-                new_aum - (prev_aum + mgmt_shareholders) // Profit after management fees
+            // 4) Calculate performance fees on net profit
+            let net_profit_after_mgmt = if (new_aum > prev_aum
+                + management_fee_assets_for_shareholders) {
+                new_aum
+                    - (prev_aum
+                        + management_fee_assets_for_shareholders) // Profit after management fees
             } else {
                 0
             };
-            let mut perf_fee_assets = 0;
+            let mut performance_fee_assets = 0;
             if (net_profit_after_mgmt.is_non_zero()) {
                 // Performance fee: fee_rate * profit / 1e18
-                perf_fee_assets = (self.performance_fees.read() * net_profit_after_mgmt) / WAD;
+                performance_fee_assets = (self.performance_fees.read() * net_profit_after_mgmt)
+                    / WAD;
             }
 
-            // 6) Process epochs and allocate buffer to satisfy redemptions
+            // 5) Process epochs and allocate buffer to satisfy redemptions
             let handled_epoch_len = self.handled_epoch_len.read();
             let mut remaining_buffer = buffer;
-            let mut new_handled = handled_epoch_len;
-            let mut j = handled_epoch_len;
+            let mut new_handled_epoch_len = handled_epoch_len;
 
             // Satisfy redemptions in FIFO order while buffer allows
-            while (j < epoch) {
-                let need = self.redeem_assets.read(j); // Assets needed for this epoch
+            while (new_handled_epoch_len <= epoch) {
+                let need = self
+                    .redeem_assets
+                    .read(new_handled_epoch_len); // Assets needed for this epoch
                 if (remaining_buffer >= need) {
                     remaining_buffer -= need;
-                    new_handled += 1; // Mark epoch as handled
-                    j += 1;
+                    new_handled_epoch_len += 1; // Mark epoch as handled
                 } else {
                     break; // Not enough buffer, stop processing
                 }
             }
-            if (new_handled > handled_epoch_len) {
-                self.handled_epoch_len.write(new_handled);
+            if (new_handled_epoch_len > handled_epoch_len) {
+                self.handled_epoch_len.write(new_handled_epoch_len);
             }
 
-            // 7) Deploy remaining buffer if all epochs are handled
-            if (new_handled == epoch) {
+            let new_epoch = epoch + 1;
+            self.epoch.write(new_epoch); // Advance to next epoch
+
+            // 6) Deploy remaining buffer if all epochs are handled
+            if (new_handled_epoch_len == new_epoch) {
                 let alloc = self.vault_allocator.read();
                 if (alloc.is_zero()) {
                     Errors::vault_allocator_not_set();
@@ -645,45 +682,51 @@ pub mod Vault {
                 self.buffer.write(remaining_buffer);
             }
 
-            // 8) Mint fee shares to recipient
+            // 7) Mint fee shares to recipient
             let recipient = self.fees_recipient.read();
             if (recipient.is_zero()) {
                 Errors::fees_recipient_not_set();
             }
 
             // Mint management fee shares
-            if (mgmt_fee_assets.is_non_zero()) {
-                // Calculate shares: (fee_assets * total_supply) / (liquidity - redemptions - fees +
-                // 1)
-                let mgmt_shares = math::u256_mul_div(
-                    mgmt_fee_assets,
-                    self.erc20.total_supply() + 1,
-                    liquidity_after - (total_redeem_assets_after_mgmt_cut + mgmt_fee_assets) + 1,
-                    Rounding::Floor,
-                );
-                if (mgmt_shares.is_non_zero()) {
-                    self.erc20.update(Zero::zero(), recipient, mgmt_shares);
-                }
+
+            let mut total_supply = self.erc20.total_supply();
+            let total_assets = liquidity_after - total_redeem_assets_after_mgmt_cut;
+            assert(total_assets == self.erc4626.total_assets(), 'Invalid total assets');
+
+            let management_fee_shares = math::u256_mul_div(
+                management_fee_assets,
+                total_supply + 1,
+                (total_assets - management_fee_assets) + 1,
+                Rounding::Floor,
+            );
+            if (management_fee_shares.is_non_zero()) {
+                self.erc20.update(Zero::zero(), recipient, management_fee_shares);
+                total_supply += management_fee_shares;
             }
 
-            // Mint performance fee shares
-            if (perf_fee_assets.is_non_zero()) {
-                // Calculate shares: (fee_assets * total_supply) / (liquidity - redemptions - fees +
-                // 1)
-                let perf_shares = math::u256_mul_div(
-                    perf_fee_assets,
-                    self.erc20.total_supply() + 1,
-                    liquidity_after - (total_redeem_assets_after_mgmt_cut + perf_fee_assets) + 1,
-                    Rounding::Floor,
-                );
-                if (perf_shares.is_non_zero()) {
-                    self.erc20.update(Zero::zero(), recipient, perf_shares);
-                }
+            let performance_fee_shares = math::u256_mul_div(
+                performance_fee_assets,
+                total_supply + 1,
+                (total_assets - performance_fee_assets) + 1,
+                Rounding::Floor,
+            );
+            if (performance_fee_shares.is_non_zero()) {
+                self.erc20.update(Zero::zero(), recipient, performance_fee_shares);
+                total_supply += performance_fee_shares;
             }
-
-            // 9) Close epoch and prepare for next
             self.last_report_timestamp.write(get_block_timestamp());
-            self.epoch.write(epoch + 1); // Advance to next epoch
+            self
+                .emit(
+                    Report {
+                        new_epoch,
+                        new_handled_epoch_len,
+                        total_supply,
+                        total_assets,
+                        management_fee_shares,
+                        performance_fee_shares,
+                    },
+                );
         }
 
         // --- Liquidity Management ---
@@ -767,6 +810,16 @@ pub mod Vault {
         fn vault_allocator(self: @ContractState) -> ContractAddress {
             self.vault_allocator.read()
         }
+
+        /// Get timestamp of the last oracle report
+        fn last_report_timestamp(self: @ContractState) -> u64 {
+            self.last_report_timestamp.read()
+        }
+
+        /// Get maximum allowed AUM change per report (in WAD format)
+        fn max_delta(self: @ContractState) -> u256 {
+            self.max_delta.read()
+        }
     }
 
     // --- Internal Helper Functions ---
@@ -809,6 +862,12 @@ pub mod Vault {
                 Errors::invalid_report_delay();
             }
             self.report_delay.write(report_delay);
+        }
+
+        /// Set and validate max delta configuration
+        /// Ensures max delta is within acceptable limits
+        fn _set_max_delta(ref self: ContractState, max_delta: u256) {
+            self.max_delta.write(max_delta);
         }
 
         /// Apply losses proportionally across all pending redemption epochs

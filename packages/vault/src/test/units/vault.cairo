@@ -2,6 +2,7 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
+use core::num::traits::Zero;
 use openzeppelin::access::accesscontrol::interface::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
@@ -17,13 +18,15 @@ use openzeppelin::token::erc721::interface::{ERC721ABIDispatcher, ERC721ABIDispa
 use openzeppelin::upgrades::interface::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
 use openzeppelin::utils::math;
 use openzeppelin::utils::math::Rounding;
-use snforge_std::{map_entry_address, store};
-use starknet::ContractAddress;
-use starknet::account::Call;
+use snforge_std::{
+    EventSpyAssertionsTrait, map_entry_address, spy_events, start_cheat_block_timestamp_global,
+    store,
+};
+use starknet::{ContractAddress, get_block_timestamp};
 use vault::redeem_request::interface::{IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait};
 use vault::test::utils::{
-    DUMMY_ADDRESS, FEES_RECIPIENT, MANAGEMENT_FEES, OTHER_DUMMY_ADDRESS, OWNER, PERFORMANCE_FEES,
-    REDEEM_FEES, REPORT_DELAY, VAULT_ALLOCATOR, VAULT_NAME, VAULT_SYMBOL, between,
+    DUMMY_ADDRESS, FEES_RECIPIENT, MANAGEMENT_FEES, MAX_DELTA, ORACLE, OTHER_DUMMY_ADDRESS, OWNER,
+    PERFORMANCE_FEES, REDEEM_FEES, REPORT_DELAY, VAULT_ALLOCATOR, VAULT_NAME, VAULT_SYMBOL, between,
     cheat_caller_address_once, deploy_counter, deploy_erc20_mock, deploy_redeem_request,
     deploy_vault,
 };
@@ -77,6 +80,7 @@ fn test_constructor() {
     assert(vault.management_fees() == MANAGEMENT_FEES(), 'Management fees');
     assert(vault.performance_fees() == PERFORMANCE_FEES(), 'Performance fees');
     assert(vault.report_delay() == REPORT_DELAY(), 'Report delay');
+    assert(vault.max_delta() == MAX_DELTA(), 'Max delta');
     assert(vault.redeem_request() == redeem_request.contract_address, 'Redeem request');
     assert(vault.vault_allocator() == VAULT_ALLOCATOR(), 'Vault allocator');
 }
@@ -471,6 +475,7 @@ fn test_request_redeem_success(x: u256) {
     assert(vault.epoch() == epoch, 'Epoch not updated');
     assert(vault.redeem_nominal(epoch) == 2 * Vault::WAD, 'Redeem nominal not updated');
 
+    let mut spy = spy_events();
     cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
     let id = vault.request_redeem(shares_to_redeem, OTHER_DUMMY_ADDRESS(), DUMMY_ADDRESS());
     assert(id == 0, 'Id not minted');
@@ -498,5 +503,1145 @@ fn test_request_redeem_success(x: u256) {
         contract_address: redeem_request.contract_address,
     };
     assert(erc721_dispatcher.owner_of(id) == OTHER_DUMMY_ADDRESS(), 'Owner not set correctly');
+
+    assert(
+        erc20_dispatcher_vault.balance_of(FEES_RECIPIENT()) == expected_shares_fee_recipient,
+        'Fees recipient balance',
+    );
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::RedeemRequested(
+                        Vault::RedeemRequested {
+                            owner: DUMMY_ADDRESS(),
+                            receiver: OTHER_DUMMY_ADDRESS(),
+                            shares: shares_to_redeem,
+                            assets: expected_assets,
+                            id,
+                            epoch,
+                        },
+                    ),
+                ),
+            ],
+        );
 }
 
+#[test]
+fn test_request_redeem_over_multiple_calls_same_epoch() {
+    let (underlying, vault, redeem_request) = set_up();
+
+    let deposit_amount = Vault::WAD * 2;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.transfer(DUMMY_ADDRESS(), deposit_amount);
+
+    cheat_caller_address_once(underlying, DUMMY_ADDRESS());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, DUMMY_ADDRESS());
+
+    let shares_a = shares / 3;
+    let shares_b = shares / 4;
+
+    let erc20_dispatcher_vault = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    erc20_dispatcher_vault.approve(OTHER_DUMMY_ADDRESS(), shares_a + shares_b);
+
+    let mut cheat_calldata_buffer = ArrayTrait::new();
+    (deposit_amount * 10).serialize(ref cheat_calldata_buffer);
+    store(vault.contract_address, selector!("buffer"), cheat_calldata_buffer.span());
+
+    let mut cheat_calldata_epoch = ArrayTrait::new();
+    let epoch: u256 = 7;
+    epoch.serialize(ref cheat_calldata_epoch);
+    store(vault.contract_address, selector!("epoch"), cheat_calldata_epoch.span());
+
+    assert(vault.buffer() == deposit_amount * 10, 'Buffer not updated');
+    assert(vault.epoch() == epoch, 'Epoch not updated');
+
+    let mut spy = spy_events();
+
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let id_a = vault.request_redeem(shares_a, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_shares_fee_recipient_a = shares_a * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_a = shares_a - expected_shares_fee_recipient_a;
+    let expected_assets_a = math::u256_mul_div(
+        remaining_shares_a, deposit_amount * 10 + 1, deposit_amount + 1, Rounding::Floor,
+    );
+    assert(vault.redeem_nominal(epoch) == expected_assets_a, 'Redeem nominal 1');
+    assert(id_a == 0, 'First NFT id incorrect');
+    assert(
+        erc20_dispatcher_vault.balance_of(FEES_RECIPIENT()) == expected_shares_fee_recipient_a,
+        'fees 1',
+    );
+    assert(erc20_dispatcher_vault.balance_of(DUMMY_ADDRESS()) == shares - shares_a, 'shares 1');
+
+    let id_info_a = redeem_request.id_to_info(id_a);
+    assert(id_info_a.epoch == epoch, 'First epoch not set correctly');
+    assert(id_info_a.nominal == expected_assets_a, 'First nominal not set correctly');
+
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    assert(erc721_dispatcher.owner_of(id_a) == DUMMY_ADDRESS(), 'First NFT owner incorrect');
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::RedeemRequested(
+                        Vault::RedeemRequested {
+                            owner: DUMMY_ADDRESS(),
+                            receiver: DUMMY_ADDRESS(),
+                            shares: shares_a,
+                            assets: expected_assets_a,
+                            id: id_a,
+                            epoch,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let id_b = vault.request_redeem(shares_b, OTHER_DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_shares_fee_recipient_b = shares_b * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_b = shares_b - expected_shares_fee_recipient_b;
+    let expected_assets_b = math::u256_mul_div(
+        remaining_shares_b,
+        (deposit_amount * 10 - expected_assets_a) + 1,
+        (deposit_amount - remaining_shares_a) + 1,
+        Rounding::Floor,
+    );
+
+    let expected_redeem_nominal = expected_assets_a + expected_assets_b;
+
+    assert(vault.redeem_nominal(epoch) == expected_redeem_nominal, 'Redeem nominal 2');
+
+    assert(
+        erc20_dispatcher_vault.balance_of(FEES_RECIPIENT()) == expected_shares_fee_recipient_a
+            + expected_shares_fee_recipient_b,
+        'fees 2',
+    );
+    assert(
+        erc20_dispatcher_vault.balance_of(DUMMY_ADDRESS()) == shares - (shares_a + shares_b),
+        'shares 1',
+    );
+    assert(id_b == 1, 'Second NFT id incorrect');
+    let id_info_b = redeem_request.id_to_info(id_b);
+    assert(id_info_b.epoch == epoch, 'Second epoch not set correctly');
+    assert(id_info_b.nominal == expected_assets_b, 'Second nominal not');
+    assert(
+        erc721_dispatcher.owner_of(id_b) == OTHER_DUMMY_ADDRESS(), 'Second NFT owner
+    incorrect',
+    );
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::RedeemRequested(
+                        Vault::RedeemRequested {
+                            owner: DUMMY_ADDRESS(),
+                            receiver: OTHER_DUMMY_ADDRESS(),
+                            shares: shares_b,
+                            assets: expected_assets_b,
+                            id: id_b,
+                            epoch,
+                        },
+                    ),
+                ),
+            ],
+        );
+}
+
+#[test]
+fn test_request_redeem_exact_max_ok() {
+    let (underlying, vault, redeem_request) = set_up();
+
+    let deposit_amount = Vault::WAD;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, OWNER());
+
+    let total_supply_before = ERC20ABIDispatcher { contract_address: vault.contract_address }
+        .total_supply();
+    let fees_recipient_balance_before = ERC20ABIDispatcher {
+        contract_address: vault.contract_address,
+    }
+        .balance_of(FEES_RECIPIENT());
+
+    let epoch = vault.epoch();
+    let redeem_nominal_before = vault.redeem_nominal(epoch);
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let id = vault.request_redeem(shares, DUMMY_ADDRESS(), OWNER());
+
+    let fee_shares = shares * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares = shares - fee_shares;
+    let expected_assets = remaining_shares;
+
+    let total_supply_after = ERC20ABIDispatcher { contract_address: vault.contract_address }
+        .total_supply();
+    let owner_balance_after = ERC20ABIDispatcher { contract_address: vault.contract_address }
+        .balance_of(OWNER());
+    let fees_recipient_balance_after = ERC20ABIDispatcher {
+        contract_address: vault.contract_address,
+    }
+        .balance_of(FEES_RECIPIENT());
+
+    assert(
+        total_supply_after == total_supply_before - (shares - fee_shares),
+        'TotalSupply
+    incorrect',
+    );
+    assert(owner_balance_after == 0, 'Owner balance incorrect');
+    assert(
+        fees_recipient_balance_after == fees_recipient_balance_before + fee_shares,
+        'Fees recipient incorrect',
+    );
+    assert(
+        vault.redeem_nominal(epoch) == redeem_nominal_before + expected_assets,
+        'Redeem nominal incorrect',
+    );
+    assert(id == 0, 'NFT id incorrect');
+
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    assert(erc721_dispatcher.owner_of(id) == DUMMY_ADDRESS(), 'NFT owner incorrect');
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::RedeemRequested(
+                        Vault::RedeemRequested {
+                            owner: OWNER(),
+                            receiver: DUMMY_ADDRESS(),
+                            shares,
+                            assets: expected_assets,
+                            id,
+                            epoch,
+                        },
+                    ),
+                ),
+            ],
+        );
+}
+
+#[test]
+fn test_request_redeem_fee_exempt_when_owner_is_fees_recipient() {
+    let (underlying, vault, redeem_request) = set_up();
+
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    vault.set_fees_config(FEES_RECIPIENT(), REDEEM_FEES(), MANAGEMENT_FEES(), PERFORMANCE_FEES());
+
+    let deposit_amount = Vault::WAD;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.transfer(FEES_RECIPIENT(), deposit_amount);
+
+    cheat_caller_address_once(underlying, FEES_RECIPIENT());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, FEES_RECIPIENT());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, FEES_RECIPIENT());
+
+    let total_supply_before = ERC20ABIDispatcher { contract_address: vault.contract_address }
+        .total_supply();
+    let epoch = vault.epoch();
+    let redeem_nominal_before = vault.redeem_nominal(epoch);
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, FEES_RECIPIENT());
+    let id = vault.request_redeem(shares, DUMMY_ADDRESS(), FEES_RECIPIENT());
+
+    let expected_assets = shares;
+    let total_supply_after = ERC20ABIDispatcher { contract_address: vault.contract_address }
+        .total_supply();
+
+    assert(total_supply_after == total_supply_before - shares, 'TotalSupply incorrect');
+    assert(
+        vault.redeem_nominal(epoch) == redeem_nominal_before + expected_assets,
+        'Redeem
+    nominal incorrect',
+    );
+    assert(
+        ERC20ABIDispatcher { contract_address: vault.contract_address }
+            .balance_of(FEES_RECIPIENT()) == 0,
+        'Fees recipient balance',
+    );
+
+    let id_info = redeem_request.id_to_info(id);
+    assert(id_info.epoch == epoch, 'Epoch not set correctly');
+    assert(id_info.nominal == expected_assets, 'Nominal not set correctly');
+
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    assert(erc721_dispatcher.owner_of(id) == DUMMY_ADDRESS(), 'Owner not set correctly');
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::RedeemRequested(
+                        Vault::RedeemRequested {
+                            owner: FEES_RECIPIENT(),
+                            receiver: DUMMY_ADDRESS(),
+                            shares,
+                            assets: expected_assets,
+                            id,
+                            epoch,
+                        },
+                    ),
+                ),
+            ],
+        );
+}
+#[test]
+fn test_request_redeem_third_party_spender_uses_allowance_and_decreases_it() {
+    let (underlying, vault, _) = set_up();
+
+    let deposit_amount = Vault::WAD;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, OWNER());
+
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    erc20_vault_dispatcher.approve(DUMMY_ADDRESS(), shares);
+
+    let shares_to_redeem = shares / 2;
+    let allowance_before = erc20_vault_dispatcher.allowance(OWNER(), DUMMY_ADDRESS());
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    vault.request_redeem(shares_to_redeem, OTHER_DUMMY_ADDRESS(), OWNER());
+    let allowance_after = erc20_vault_dispatcher.allowance(OWNER(), DUMMY_ADDRESS());
+    assert(allowance_after == allowance_before - shares_to_redeem, 'Allowance not decreased');
+}
+
+fn test_custom_total_assets_and_shares() {
+    let (_, vault, _) = set_up();
+
+    // cheat buffer
+    let mut cheat_calldata_buffer = ArrayTrait::new();
+    (Vault::WAD * 10).serialize(ref cheat_calldata_buffer);
+    store(vault.contract_address, selector!("buffer"), cheat_calldata_buffer.span());
+    assert(vault.buffer() == Vault::WAD * 10, 'Buffer not updated');
+
+    // cheat aum
+    let mut cheat_calldata_aum = ArrayTrait::new();
+    (Vault::WAD * 100).serialize(ref cheat_calldata_aum);
+    store(vault.contract_address, selector!("aum"), cheat_calldata_aum.span());
+    assert(vault.aum() == Vault::WAD * 100, 'AUM not updated');
+
+    // cheat epoch
+    let mut cheat_calldata_epoch = ArrayTrait::new();
+    let epoch: u256 = 7;
+    epoch.serialize(ref cheat_calldata_epoch);
+    store(vault.contract_address, selector!("epoch"), cheat_calldata_epoch.span());
+    assert(vault.epoch() == epoch, 'Epoch not updated');
+
+    // cheat handled_epoch_len
+    let mut cheat_calldata_handled_epoch_len = ArrayTrait::new();
+    (epoch - 1).serialize(ref cheat_calldata_handled_epoch_len);
+    store(
+        vault.contract_address,
+        selector!("handled_epoch_len"),
+        cheat_calldata_handled_epoch_len.span(),
+    );
+    assert(vault.handled_epoch_len() == epoch, 'Handled epoch len not updated');
+
+    // cheat redeem_nominal epoch 6
+    let mut cheat_calldata_redeem_nominal = ArrayTrait::new();
+    (Vault::WAD * 12).serialize(ref cheat_calldata_redeem_nominal);
+    store(
+        vault.contract_address,
+        map_entry_address(selector!("redeem_nominal"), cheat_calldata_handled_epoch_len.span()),
+        cheat_calldata_redeem_nominal.span(),
+    );
+    assert(vault.redeem_nominal(epoch - 1) == Vault::WAD * 12, 'Redeem nominal not updated');
+
+    // cheat redeem_assets epoch 7
+    let mut cheat_calldata_redeem_assets = ArrayTrait::new();
+    (Vault::WAD * 15).serialize(ref cheat_calldata_redeem_assets);
+    store(
+        vault.contract_address,
+        map_entry_address(selector!("redeem_assets"), cheat_calldata_epoch.span()),
+        cheat_calldata_redeem_assets.span(),
+    );
+    assert(vault.redeem_assets(epoch) == Vault::WAD * 15, 'Redeem assets not updated');
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    let expected_total_assets = Vault::WAD * 100
+        + Vault::WAD * 10
+        - (Vault::WAD * 12 + Vault::WAD * 15);
+    assert(
+        erc4626_dispatcher.total_assets() == expected_total_assets, 'Total assets not
+    updated',
+    );
+}
+
+#[test]
+#[should_panic(expected: ('Pausable: paused',))]
+fn test_claim_redeem_when_paused() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    vault.pause();
+
+    vault.claim_redeem(0);
+}
+
+#[test]
+#[should_panic(expected: ('ERC721: invalid token ID',))]
+fn test_claim_redeem_when_invalid_id() {
+    let (_, vault, _) = set_up();
+    vault.claim_redeem(0);
+}
+
+#[test]
+#[should_panic(expected: "Redeem assets not claimable")]
+fn test_claim_redeem_epoch_not_processed() {
+    let (underlying, vault, _) = set_up();
+
+    let deposit_amount = Vault::WAD;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, OWNER());
+
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let id = vault.request_redeem(shares, OWNER(), OWNER());
+
+    vault.claim_redeem(id);
+}
+
+#[test]
+fn test_claim_redeem_success() {
+    let (underlying, vault, _) = set_up();
+
+    let deposit_amount = Vault::WAD;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, OWNER());
+
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let id = vault.request_redeem(shares, OWNER(), OWNER());
+
+    let epoch = vault.epoch();
+    let redeem_nominal = vault.redeem_nominal(epoch);
+
+    let mut cheat_calldata_handled_epoch = ArrayTrait::new();
+    (epoch + 1).serialize(ref cheat_calldata_handled_epoch);
+    store(
+        vault.contract_address, selector!("handled_epoch_len"), cheat_calldata_handled_epoch.span(),
+    );
+
+    let redeem_assets = redeem_nominal;
+    let mut cheat_calldata_redeem_assets = ArrayTrait::new();
+    redeem_assets.serialize(ref cheat_calldata_redeem_assets);
+
+    let owner_balance_before = erc20_dispatcher.balance_of(OWNER());
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let assets_received = vault.claim_redeem(id);
+
+    assert(assets_received == redeem_assets, 'Incorrect assets received');
+    assert(
+        erc20_dispatcher.balance_of(OWNER()) == owner_balance_before + assets_received,
+        'Balance not updated',
+    );
+    assert(vault.redeem_nominal(epoch) == 0, 'Redeem nominal not updated');
+    assert(vault.redeem_assets(epoch) == 0, 'Redeem assets not updated');
+
+    let expected_redeem_nominal = shares - (shares * REDEEM_FEES() / Vault::WAD);
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::RedeemClaimed(
+                        Vault::RedeemClaimed {
+                            receiver: OWNER(),
+                            redeem_request_nominal: expected_redeem_nominal,
+                            assets: assets_received,
+                            id,
+                            epoch,
+                        },
+                    ),
+                ),
+            ],
+        );
+}
+
+#[test]
+fn test_claim_redeem_proportional_distribution() {
+    let (underlying, vault, redeem_request) = set_up();
+
+    let deposit_amount = Vault::WAD * 2;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.transfer(DUMMY_ADDRESS(), deposit_amount);
+
+    cheat_caller_address_once(underlying, DUMMY_ADDRESS());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, DUMMY_ADDRESS());
+
+    let shares_to_redeem_1 = shares / 3;
+    let shares_to_redeem_2 = shares / 4;
+
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    erc20_vault_dispatcher.approve(OTHER_DUMMY_ADDRESS(), shares_to_redeem_1 + shares_to_redeem_2);
+
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let id1 = vault.request_redeem(shares_to_redeem_1, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let id2 = vault.request_redeem(shares_to_redeem_2, OTHER_DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let epoch = vault.epoch();
+    let redeem_nominal = vault.redeem_nominal(epoch);
+
+    let mut cheat_calldata_handled_epoch = ArrayTrait::new();
+    (epoch + 1).serialize(ref cheat_calldata_handled_epoch);
+    store(
+        vault.contract_address, selector!("handled_epoch_len"), cheat_calldata_handled_epoch.span(),
+    );
+
+    let available_assets = redeem_nominal * 9 / 10;
+    let mut cheat_calldata_redeem_assets = ArrayTrait::new();
+    available_assets.serialize(ref cheat_calldata_redeem_assets);
+
+    let mut cheat_calldata_epoch_key = ArrayTrait::new();
+    epoch.serialize(ref cheat_calldata_epoch_key);
+    let map_entry = map_entry_address(selector!("redeem_assets"), cheat_calldata_epoch_key.span());
+    store(vault.contract_address, map_entry, cheat_calldata_redeem_assets.span());
+
+    let redeem_request_1_info = redeem_request.id_to_info(id1);
+    let redeem_request_2_info = redeem_request.id_to_info(id2);
+
+    let expected_assets_1 = (redeem_request_1_info.nominal * available_assets) / redeem_nominal;
+    let expected_assets_2 = (redeem_request_2_info.nominal * available_assets) / redeem_nominal;
+
+    let balance_1_before = erc20_dispatcher.balance_of(DUMMY_ADDRESS());
+    let balance_2_before = erc20_dispatcher.balance_of(OTHER_DUMMY_ADDRESS());
+
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let assets_1 = vault.claim_redeem(id1);
+
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let assets_2 = vault.claim_redeem(id2);
+
+    assert(assets_1 == expected_assets_1, 'Incorrect assets 1');
+    assert(assets_2 == expected_assets_2, 'Incorrect assets 2');
+    assert(
+        erc20_dispatcher.balance_of(DUMMY_ADDRESS()) == balance_1_before + assets_1,
+        'Balance 1 not updated',
+    );
+    assert(
+        erc20_dispatcher.balance_of(OTHER_DUMMY_ADDRESS()) == balance_2_before + assets_2,
+        'Balance 2 not updated',
+    );
+    assert(
+        vault.redeem_assets(epoch) == available_assets - assets_1 - assets_2,
+        'Redeem assets incorrect',
+    );
+}
+
+#[test]
+#[should_panic(expected: ('ERC721: invalid token ID',))]
+fn test_claim_redeem_nft_burned() {
+    let (underlying, vault, redeem_request) = set_up();
+
+    let deposit_amount = Vault::WAD;
+    let erc20_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_dispatcher.approve(vault.contract_address, deposit_amount);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let shares = erc4626_dispatcher.deposit(deposit_amount, OWNER());
+
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let id = vault.request_redeem(shares, OWNER(), OWNER());
+
+    let epoch = vault.epoch();
+    let redeem_nominal = vault.redeem_nominal(epoch);
+
+    let mut cheat_calldata_handled_epoch = ArrayTrait::new();
+    (epoch + 1).serialize(ref cheat_calldata_handled_epoch);
+    store(
+        vault.contract_address, selector!("handled_epoch_len"), cheat_calldata_handled_epoch.span(),
+    );
+
+    let mut cheat_calldata_redeem_assets = ArrayTrait::new();
+    redeem_nominal.serialize(ref cheat_calldata_redeem_assets);
+
+    let mut cheat_calldata_epoch_key = ArrayTrait::new();
+    epoch.serialize(ref cheat_calldata_epoch_key);
+    let map_entry = map_entry_address(selector!("redeem_assets"), cheat_calldata_epoch_key.span());
+    store(vault.contract_address, map_entry, cheat_calldata_redeem_assets.span());
+
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    vault.claim_redeem(id);
+
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    erc721_dispatcher.owner_of(id);
+}
+
+#[test]
+#[should_panic(expected: ('Pausable: paused',))]
+fn test_report_when_paused() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    vault.pause();
+    vault.report(Vault::WAD);
+}
+
+#[test]
+#[should_panic(expected: ('Caller is missing role',))]
+fn test_report_when_not_oracle() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    vault.report(Vault::WAD);
+}
+
+#[test]
+#[should_panic(expected: "Report too early - redeem delay not elapsed")]
+fn test_report_too_early() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let access_controler_dispatcher = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    access_controler_dispatcher.grant_role(Vault::ORACLE_ROLE, ORACLE());
+
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(Vault::WAD);
+}
+
+
+#[test]
+#[should_panic(expected: "Invalid new AUM: 1000000000000000000")]
+fn test_report_when_new_aum_is_zero() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let access_controler_dispatcher = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    access_controler_dispatcher.grant_role(Vault::ORACLE_ROLE, ORACLE());
+
+    let current_timestamp = get_block_timestamp();
+
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(Vault::WAD);
+}
+
+
+#[test]
+#[should_panic(expected: "Liquidity is zero")]
+fn test_report_when_liquidity_is_zero() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let access_controler_dispatcher = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    access_controler_dispatcher.grant_role(Vault::ORACLE_ROLE, ORACLE());
+
+    let current_timestamp = get_block_timestamp();
+
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(Zero::zero());
+}
+
+
+#[test]
+#[should_panic(expected: "Vault allocator not set")]
+fn test_report_when_vault_allocator_is_not_set() {
+    let (underlying, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let access_controler_dispatcher = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    access_controler_dispatcher.grant_role(Vault::ORACLE_ROLE, ORACLE());
+
+    let current_timestamp = get_block_timestamp();
+
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let er20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    er20_underlying_dispatcher.transfer(DUMMY_ADDRESS(), Vault::WAD);
+
+    cheat_caller_address_once(underlying, DUMMY_ADDRESS());
+    er20_underlying_dispatcher.approve(vault.contract_address, Vault::WAD);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let shares = erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
+
+    let mut cheat_calldata_vault_allocator = ArrayTrait::new();
+    cheat_calldata_vault_allocator.append(0);
+    store(
+        vault.contract_address, selector!("vault_allocator"), cheat_calldata_vault_allocator.span(),
+    );
+    assert(vault.vault_allocator() == Zero::zero(), 'Vault allocator not set');
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(Zero::zero());
+}
+
+
+#[test]
+#[should_panic(expected: "Fees recipient not set")]
+fn test_report_when_fees_recipient_is_not_set() {
+    let (underlying, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let access_controler_dispatcher = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    access_controler_dispatcher.grant_role(Vault::ORACLE_ROLE, ORACLE());
+
+    let current_timestamp = get_block_timestamp();
+
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let er20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    er20_underlying_dispatcher.transfer(DUMMY_ADDRESS(), Vault::WAD);
+
+    cheat_caller_address_once(underlying, DUMMY_ADDRESS());
+    er20_underlying_dispatcher.approve(vault.contract_address, Vault::WAD);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let shares = erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
+
+    let mut cheat_calldata_fees_recipient = ArrayTrait::new();
+    cheat_calldata_fees_recipient.append(0);
+    store(
+        vault.contract_address, selector!("fees_recipient"), cheat_calldata_fees_recipient.span(),
+    );
+    assert(vault.fees_recipient() == Zero::zero(), 'Fees recipient not set');
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(Zero::zero());
+}
+
+
+fn check_vault_state(
+    vault: IVaultDispatcher,
+    expected_epoch: u256,
+    expected_handled_epoch_len: u256,
+    expected_total_supply: u256,
+    expected_aum: u256,
+    expected_buffer: u256,
+    expected_redeem_nominal_and_redeem_assets: Array<(u256, u256)>,
+) {
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+
+    assert(vault.epoch() == expected_epoch, 'Epoch not updated');
+    assert(vault.handled_epoch_len() == expected_handled_epoch_len, 'Invalid handled epoch len');
+    assert(erc20_vault_dispatcher.total_supply() == expected_total_supply, 'Invalid total supply');
+    assert(vault.aum() == expected_aum, 'Invalid aum');
+    assert(vault.buffer() == expected_buffer, 'Invalid buffer');
+
+    assert(
+        expected_redeem_nominal_and_redeem_assets
+            .len()
+            .into() == (expected_epoch - expected_handled_epoch_len)
+            + 1,
+        ' nominal and  assets',
+    );
+
+    let mut total_redeem_assets = Zero::zero();
+    let mut i = expected_handled_epoch_len;
+    while i < expected_epoch {
+        let (nominal, assets) = *expected_redeem_nominal_and_redeem_assets
+            .at(i.try_into().unwrap());
+        total_redeem_assets += assets;
+        assert(vault.redeem_assets(i) == total_redeem_assets, 'Invalid redeem assets');
+        assert(vault.redeem_nominal(i) == nominal, 'Invalid redeem nominal');
+        i += 1;
+    }
+
+    let expected_total_assets = expected_aum + expected_buffer - total_redeem_assets;
+    assert(erc4626_dispatcher.total_assets() == expected_total_assets, 'Invalid total assets');
+}
+
+fn setup_report_simple_deposit_epoch_0() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    let access_controler_dispatcher = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    access_controler_dispatcher.grant_role(Vault::ORACLE_ROLE, ORACLE());
+
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let er20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    cheat_caller_address_once(underlying, OWNER());
+    er20_underlying_dispatcher.transfer(DUMMY_ADDRESS(), Vault::WAD);
+
+    cheat_caller_address_once(underlying, DUMMY_ADDRESS());
+    er20_underlying_dispatcher.approve(vault.contract_address, Vault::WAD);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let shares = erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
+
+    // Epoch 0, pre-report state
+    let mut expected_epoch = 0;
+    let mut expected_handled_epoch_len = 0;
+    let mut expected_total_supply = shares;
+    let mut expected_aum = Zero::zero();
+    let mut expected_buffer = Vault::WAD;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 1, post-report state
+    let new_aum = Zero::zero();
+
+    let mut expected_management_fees_assets = (Vault::WAD
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_buffer + expected_aum - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+
+    let performance_fee_shares = 0;
+    expected_total_supply = expected_total_supply + management_fee_shares;
+    expected_buffer = Zero::zero();
+    expected_epoch = 1;
+    expected_handled_epoch_len = 1;
+    expected_aum = Vault::WAD;
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_aum,
+                            management_fee_shares,
+                            performance_fee_shares: performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_report_simple_deposit() {
+    setup_report_simple_deposit_epoch_0();
+}
+
+fn setup_report_simple_deposit_with_profit_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let er20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+
+    let new_assets_to_deposit = 3 * Vault::WAD;
+
+    cheat_caller_address_once(underlying, OWNER());
+    er20_underlying_dispatcher.transfer(OTHER_DUMMY_ADDRESS(), new_assets_to_deposit);
+
+    cheat_caller_address_once(underlying, OTHER_DUMMY_ADDRESS());
+    er20_underlying_dispatcher.approve(vault.contract_address, new_assets_to_deposit);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let new_shares = erc4626_dispatcher.deposit(new_assets_to_deposit, OTHER_DUMMY_ADDRESS());
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply + new_shares;
+    let mut expected_aum = Vault::WAD;
+    let mut expected_buffer = new_assets_to_deposit;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let profit_amount = current_aum / 100;
+    let new_aum = current_aum + profit_amount;
+
+    let expected_total_assets = new_aum + expected_buffer;
+
+    let mut expected_management_fees_assets = (expected_total_assets
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    let net_profit_after_mgmt = profit_amount - expected_management_fees_assets;
+    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    let performance_fee_shares = math::u256_mul_div(
+        expected_performance_fee_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + performance_fee_shares;
+
+    expected_buffer = Zero::zero();
+    expected_epoch = 2;
+    expected_handled_epoch_len = 2;
+    expected_aum = new_aum + expected_buffer;
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    // Check that Report event was emitted
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_report_simple_deposit_with_profit() {
+    setup_report_simple_deposit_with_profit_epoch_1();
+}
+
+fn setup_report_simple_deposit_with_loss_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    // Dépôt additionnel pour créer du buffer à déployer à l’epoch 2
+    let erc20_underlying = ERC20ABIDispatcher { contract_address: underlying };
+    let new_assets_to_deposit = 3 * Vault::WAD;
+
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_underlying.transfer(OTHER_DUMMY_ADDRESS(), new_assets_to_deposit);
+
+    cheat_caller_address_once(underlying, OTHER_DUMMY_ADDRESS());
+    erc20_underlying.approve(vault.contract_address, new_assets_to_deposit);
+
+    let erc4626 = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let new_shares = erc4626.deposit(new_assets_to_deposit, OTHER_DUMMY_ADDRESS());
+
+    // Epoch 1, état pré-report
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply + new_shares;
+    let mut expected_aum = Vault::WAD;
+    let mut expected_buffer = new_assets_to_deposit;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, état post-report avec perte
+    let current_aum = vault.aum();
+    let loss_amount = current_aum / 100; // 1% de perte
+    let new_aum = current_aum - loss_amount; // AUM après perte
+
+    let expected_total_assets = new_aum + expected_buffer; // avant déploiement du buffer
+
+    // Management fees sur total_assets (aucun redeem en attente)
+    let expected_management_fees_assets = (expected_total_assets
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        (expected_total_assets - expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    // Pas de perf fee si pas de profit net
+    let performance_fee_shares = 0;
+
+    // Après report: tout le buffer est déployé car aucun redeem en attente
+    expected_buffer = Zero::zero();
+    expected_epoch = 2;
+    expected_handled_epoch_len = 2;
+    expected_aum = new_aum + (3 * Vault::WAD); // new_aum + buffer déployé
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    (underlying, vault, redeem_request)
+}
+
+
+#[test]
+fn test_report_simple_deposit_with_loss() {
+    setup_report_simple_deposit_with_loss_epoch_1();
+}

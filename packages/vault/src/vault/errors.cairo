@@ -62,4 +62,8 @@ pub mod Errors {
     pub fn vault_allocator_already_registered() {
         panic!("Vault allocator already registered");
     }
+
+    pub fn invalid_new_aum(new_aum: u256) {
+        panic!("Invalid new AUM: {}", new_aum);
+    }
 }

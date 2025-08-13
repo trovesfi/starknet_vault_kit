@@ -22,6 +22,7 @@ pub trait IVault<TContractState> {
         performance_fees: u256,
     );
     fn set_report_delay(ref self: TContractState, report_delay: u64);
+    fn set_max_delta(ref self: TContractState, max_delta: u256);
     fn report(ref self: TContractState, new_aum: u256);
     fn bring_liquidity(ref self: TContractState, amount: u256);
 
@@ -41,5 +42,7 @@ pub trait IVault<TContractState> {
     fn redeem_request(self: @TContractState) -> ContractAddress;
     fn report_delay(self: @TContractState) -> u64;
     fn vault_allocator(self: @TContractState) -> ContractAddress;
+    fn last_report_timestamp(self: @TContractState) -> u64;
+    fn max_delta(self: @TContractState) -> u256;
 }
 

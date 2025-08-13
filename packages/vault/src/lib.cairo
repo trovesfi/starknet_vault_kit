@@ -21,6 +21,7 @@ pub mod redeem_request {
 pub mod test {
     pub mod utils;
     pub mod units {
+        pub mod redeem_request;
         pub mod vault;
     }
 }
