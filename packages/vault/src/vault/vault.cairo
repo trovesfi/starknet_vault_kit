@@ -234,7 +234,7 @@ pub mod Vault {
         self._set_report_delay(report_delay);
 
         // Set max delta
-        self._set_max_delta(max_delta);
+        self.max_delta.write(max_delta);
 
         // Initialize timestamp for fee calculations
         self.last_report_timestamp.write(get_block_timestamp());
@@ -364,7 +364,7 @@ pub mod Vault {
 
     /// Core vault functionality including epoched redemptions, reporting, and configuration
     #[abi(embed_v0)]
-    impl VaultImpl of IVault<ContractState> {
+    pub impl VaultImpl of IVault<ContractState> {
         // --- Administrative Functions ---
 
         /// Register the NFT contract for tracking redemption requests
@@ -413,7 +413,7 @@ pub mod Vault {
         /// Only callable by owner to prevent unauthorized changes
         fn set_max_delta(ref self: ContractState, max_delta: u256) {
             self.access_control.assert_only_role(OWNER_ROLE); // Only owner can update max delta
-            self._set_max_delta(max_delta);
+            self.max_delta.write(max_delta);
         }
 
         // --- Emergency Controls ---
@@ -561,15 +561,16 @@ pub mod Vault {
             self.pausable.assert_not_paused(); // Prevent reporting when paused
             self.access_control.assert_only_role(ORACLE_ROLE); // Only oracle can report AUM
 
+            let new_epoch = self.epoch.read() + 1;
+            self.epoch.write(new_epoch); // Advance to next epoch
+
             // Check redeem delay constraint
             let current_timestamp = get_block_timestamp();
-            let last_report = self.last_report_timestamp.read();
-            let report_delay = self.report_delay.read();
-            if (current_timestamp < last_report + report_delay) {
+            let dt: u64 = current_timestamp - self.last_report_timestamp.read();
+            if (dt < self.report_delay.read()) {
                 Errors::report_too_early(); // Must wait for redeem delay to pass
             }
-
-            let epoch = self.epoch.read();
+            self.last_report_timestamp.write(current_timestamp);
 
             let prev_aum = self.aum.read();
 
@@ -606,13 +607,15 @@ pub mod Vault {
                 0
             };
 
+            let handled_epoch_len = self.handled_epoch_len.read();
             let total_redeem_assets_after_loss_cut = self
-                ._apply_loss_on_redeems(market_loss_assets, liquidity_before);
+                ._apply_loss_on_redeems(
+                    market_loss_assets, liquidity_before, new_epoch, handled_epoch_len,
+                );
 
             let liquidity_after = new_aum + buffer; // Liquidity after market losses
 
             // 3) Calculate and apply management fees
-            let dt: u64 = get_block_timestamp() - self.last_report_timestamp.read();
             // Annual fee formula: (fee_rate * time_elapsed * liquidity) / (seconds_per_year * 1e18)
             let management_fee_assets = (self.management_fees.read()
                 * (dt.into())
@@ -620,7 +623,9 @@ pub mod Vault {
                 / (YEAR.into() * WAD);
 
             let total_redeem_assets_after_mgmt_cut = self
-                ._apply_loss_on_redeems(management_fee_assets, liquidity_after);
+                ._apply_loss_on_redeems(
+                    management_fee_assets, liquidity_after, new_epoch, handled_epoch_len,
+                );
 
             // Management fee allocated to shareholders vs redemptions
             let management_fee_assets_for_shareholders = management_fee_assets
@@ -643,12 +648,11 @@ pub mod Vault {
             }
 
             // 5) Process epochs and allocate buffer to satisfy redemptions
-            let handled_epoch_len = self.handled_epoch_len.read();
             let mut remaining_buffer = buffer;
             let mut new_handled_epoch_len = handled_epoch_len;
 
             // Satisfy redemptions in FIFO order while buffer allows
-            while (new_handled_epoch_len <= epoch) {
+            while (new_handled_epoch_len < new_epoch) {
                 let need = self
                     .redeem_assets
                     .read(new_handled_epoch_len); // Assets needed for this epoch
@@ -662,9 +666,6 @@ pub mod Vault {
             if (new_handled_epoch_len > handled_epoch_len) {
                 self.handled_epoch_len.write(new_handled_epoch_len);
             }
-
-            let new_epoch = epoch + 1;
-            self.epoch.write(new_epoch); // Advance to next epoch
 
             // 6) Deploy remaining buffer if all epochs are handled
             if (new_handled_epoch_len == new_epoch) {
@@ -715,7 +716,7 @@ pub mod Vault {
                 self.erc20.update(Zero::zero(), recipient, performance_fee_shares);
                 total_supply += performance_fee_shares;
             }
-            self.last_report_timestamp.write(get_block_timestamp());
+            assert(total_supply == self.erc20.total_supply(), 'Invalid total supply');
             self
                 .emit(
                     Report {
@@ -826,7 +827,7 @@ pub mod Vault {
 
     /// Internal helper functions for fee management, loss allocation, and accounting
     #[generate_trait]
-    impl InternalFunctions of InternalFunctionsTrait {
+    pub impl InternalFunctions of InternalFunctionsTrait {
         /// Set and validate fee configuration
         /// Ensures all fees are within acceptable limits
         fn _set_fees_config(
@@ -864,27 +865,21 @@ pub mod Vault {
             self.report_delay.write(report_delay);
         }
 
-        /// Set and validate max delta configuration
-        /// Ensures max delta is within acceptable limits
-        fn _set_max_delta(ref self: ContractState, max_delta: u256) {
-            self.max_delta.write(max_delta);
-        }
-
         /// Apply losses proportionally across all pending redemption epochs
         /// This ensures losses are shared fairly among all redemption requests
         fn _apply_loss_on_redeems(
             ref self: ContractState,
             loss_assets: u256, // Total loss amount to distribute
-            base: u256 // Base for proportional calculation (prev_aum + buffer)
+            base: u256, // Base for proportional calculation (prev_aum + buffer)
+            new_epoch: u256,
+            handled_epoch_len: u256,
         ) -> u256 { // Returns total assets after loss application
-            let epoch = self.epoch.read();
-            let mut i = self.handled_epoch_len.read();
-
+            let mut i = handled_epoch_len;
             let mut remaining: u256 = loss_assets; // Remaining loss to distribute
             let mut total_after: u256 = 0; // Total redemption assets after losses
 
             // Iterate through all pending epochs to apply losses proportionally
-            while (i <= epoch) {
+            while (i < new_epoch) {
                 let ra = self.redeem_assets.read(i); // Redemption assets for this epoch
                 let num = ra * loss_assets; // Proportional loss calculation
                 let mut cut = num / base; // Loss amount for this epoch

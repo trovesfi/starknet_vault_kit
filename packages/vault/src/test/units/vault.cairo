@@ -20,7 +20,7 @@ use openzeppelin::utils::math;
 use openzeppelin::utils::math::Rounding;
 use snforge_std::{
     EventSpyAssertionsTrait, map_entry_address, spy_events, start_cheat_block_timestamp_global,
-    store,
+    store, test_address,
 };
 use starknet::{ContractAddress, get_block_timestamp};
 use vault::redeem_request::interface::{IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait};
@@ -32,6 +32,7 @@ use vault::test::utils::{
 };
 use vault::vault::interface::{IVaultDispatcher, IVaultDispatcherTrait};
 use vault::vault::vault::Vault;
+use vault::vault::vault::Vault::{InternalFunctions, VaultImpl};
 use vault_allocator::mocks::counter::{ICounterDispatcher, ICounterDispatcherTrait};
 
 fn set_up() -> (ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher) {
@@ -130,6 +131,21 @@ fn test_register_vault_allocator_already_registered() {
     let (_, vault, _) = set_up();
     cheat_caller_address_once(vault.contract_address, OWNER());
     vault.register_vault_allocator(DUMMY_ADDRESS());
+}
+
+#[test]
+#[should_panic(expected: ('Caller is missing role',))]
+fn test_set_max_delta_not_owner() {
+    let (_, vault, _) = set_up();
+    vault.set_max_delta(MAX_DELTA() + 1);
+}
+
+#[test]
+fn test_set_max_delta_success() {
+    let (_, vault, _) = set_up();
+    cheat_caller_address_once(vault.contract_address, OWNER());
+    vault.set_max_delta(MAX_DELTA() + 1);
+    assert(vault.max_delta() == MAX_DELTA() + 1, 'Max delta not updated');
 }
 
 #[test]
@@ -1134,6 +1150,183 @@ fn test_claim_redeem_nft_burned() {
     erc721_dispatcher.owner_of(id);
 }
 
+fn test_internal_apply_loss_on_redeems() {
+    let address_vault = test_address();
+    let mut state = Vault::contract_state_for_testing();
+
+    let loss_amount = 100;
+    let base = 1000;
+
+    let handled_epoch_len: u256 = 0;
+    let new_epoch: u256 = 1;
+
+    let mut redeem_assets = ArrayTrait::new();
+    redeem_assets.append(500);
+
+    let mut i = handled_epoch_len;
+    while (i < new_epoch) {
+        let elem = *redeem_assets.at(i.try_into().unwrap());
+        let mut epoch_entry = ArrayTrait::new();
+        i.serialize(ref epoch_entry);
+
+        let mut cheat_store_redeem_assets_at_epoch = ArrayTrait::new();
+        elem.serialize(ref cheat_store_redeem_assets_at_epoch);
+
+        store(
+            address_vault,
+            map_entry_address(selector!("redeem_assets"), epoch_entry.span()),
+            cheat_store_redeem_assets_at_epoch.span(),
+        );
+        assert(state.redeem_assets(i) == elem, 'Redeem assets at epoch');
+        i += 1;
+    }
+
+    let total_redeem_assets_after_loss = state
+        ._apply_loss_on_redeems(loss_amount, base, new_epoch, handled_epoch_len);
+
+    assert(total_redeem_assets_after_loss == 450, 'Total redeem assets after loss');
+    assert(state.redeem_assets(0) == 450, 'Redeem assets at epoch 0');
+}
+
+#[test]
+fn test_internal_apply_loss_on_redeems_multiple_epochs() {
+    let address_vault = test_address();
+    let mut state = Vault::contract_state_for_testing();
+
+    let loss_amount = 300;
+    let base = 2000;
+
+    let handled_epoch_len: u256 = 1;
+    let new_epoch: u256 = 4;
+
+    let mut redeem_assets = ArrayTrait::new();
+    redeem_assets.append(600); // epoch 1
+    redeem_assets.append(800); // epoch 2
+    redeem_assets.append(400); // epoch 3
+
+    let mut i = handled_epoch_len;
+    while (i < new_epoch) {
+        let elem = *redeem_assets.at((i - handled_epoch_len).try_into().unwrap());
+        let mut epoch_entry = ArrayTrait::new();
+        i.serialize(ref epoch_entry);
+
+        let mut cheat_store_redeem_assets_at_epoch = ArrayTrait::new();
+        elem.serialize(ref cheat_store_redeem_assets_at_epoch);
+
+        store(
+            address_vault,
+            map_entry_address(selector!("redeem_assets"), epoch_entry.span()),
+            cheat_store_redeem_assets_at_epoch.span(),
+        );
+        assert(state.redeem_assets(i) == elem, 'Redeem assets at epoch');
+        i += 1;
+    }
+
+    let total_redeem_assets_after_loss = state
+        ._apply_loss_on_redeems(loss_amount, base, new_epoch, handled_epoch_len);
+
+    // Expected losses:
+    // epoch 1: 600 * 300 / 2000 = 90 -> 600 - 90 = 510
+    // epoch 2: 800 * 300 / 2000 = 120 -> 800 - 120 = 680
+    // epoch 3: 400 * 300 / 2000 = 60 -> 400 - 60 = 340
+    // Total: 510 + 680 + 340 = 1530
+
+    assert(total_redeem_assets_after_loss == 1530, 'Total after loss incorrect');
+    assert(state.redeem_assets(1) == 510, 'Epoch 1 assets incorrect');
+    assert(state.redeem_assets(2) == 680, 'Epoch 2 assets incorrect');
+    assert(state.redeem_assets(3) == 340, 'Epoch 3 assets incorrect');
+}
+
+#[test]
+fn test_internal_apply_loss_on_redeems_rounding_up() {
+    let address_vault = test_address();
+    let mut state = Vault::contract_state_for_testing();
+
+    let loss_amount = 7;
+    let base = 100;
+
+    let handled_epoch_len: u256 = 0;
+    let new_epoch: u256 = 3;
+
+    let mut redeem_assets = ArrayTrait::new();
+    redeem_assets.append(15); // epoch 0: 15 * 7 / 100 = 1.05 -> rounds up to 2
+    redeem_assets.append(20); // epoch 1: 20 * 7 / 100 = 1.4 -> rounds up to 2
+    redeem_assets
+        .append(50); // epoch 2: 50 * 7 / 100 = 3.5 -> rounds up to 4, but limited by remaining =3
+
+    let mut i = handled_epoch_len;
+    while (i < new_epoch) {
+        let elem = *redeem_assets.at(i.try_into().unwrap());
+        let mut epoch_entry = ArrayTrait::new();
+        i.serialize(ref epoch_entry);
+
+        let mut cheat_store_redeem_assets_at_epoch = ArrayTrait::new();
+        elem.serialize(ref cheat_store_redeem_assets_at_epoch);
+
+        store(
+            address_vault,
+            map_entry_address(selector!("redeem_assets"), epoch_entry.span()),
+            cheat_store_redeem_assets_at_epoch.span(),
+        );
+        i += 1;
+    }
+
+    let total_redeem_assets_after_loss = state
+        ._apply_loss_on_redeems(loss_amount, base, new_epoch, handled_epoch_len);
+
+    // Expected:
+    // epoch 0: 15 - 2 = 13 (cut = 2, remaining = 5)
+    // epoch 1: 20 - 2 = 18 (cut = 2, remaining = 3)
+    // epoch 2: 50 - 3 = 47 (cut = 3, remaining = 0)
+    // Total: 13 + 18 + 47 = 78
+
+    assert(total_redeem_assets_after_loss == 78, 'Total rounding test failed');
+    assert(state.redeem_assets(0) == 13, 'Epoch 0 rounding incorrect');
+    assert(state.redeem_assets(1) == 18, 'Epoch 1 rounding incorrect');
+    assert(state.redeem_assets(2) == 47, 'Epoch 2 rounding incorrect');
+}
+
+#[test]
+fn test_internal_apply_loss_on_redeems_zero_loss() {
+    let address_vault = test_address();
+    let mut state = Vault::contract_state_for_testing();
+
+    let loss_amount = 0;
+    let base = 1000;
+
+    let handled_epoch_len: u256 = 0;
+    let new_epoch: u256 = 2;
+
+    let mut redeem_assets = ArrayTrait::new();
+    redeem_assets.append(300);
+    redeem_assets.append(500);
+
+    let mut i = handled_epoch_len;
+    while (i < new_epoch) {
+        let elem = *redeem_assets.at(i.try_into().unwrap());
+        let mut epoch_entry = ArrayTrait::new();
+        i.serialize(ref epoch_entry);
+
+        let mut cheat_store_redeem_assets_at_epoch = ArrayTrait::new();
+        elem.serialize(ref cheat_store_redeem_assets_at_epoch);
+
+        store(
+            address_vault,
+            map_entry_address(selector!("redeem_assets"), epoch_entry.span()),
+            cheat_store_redeem_assets_at_epoch.span(),
+        );
+        i += 1;
+    }
+
+    let total_redeem_assets_after_loss = state
+        ._apply_loss_on_redeems(loss_amount, base, new_epoch, handled_epoch_len);
+
+    // No loss should be applied
+    assert(total_redeem_assets_after_loss == 800, 'Zero loss test failed');
+    assert(state.redeem_assets(0) == 300, 'Epoch 0 unchanged');
+    assert(state.redeem_assets(1) == 500, 'Epoch 1 unchanged');
+}
+
 #[test]
 #[should_panic(expected: ('Pausable: paused',))]
 fn test_report_when_paused() {
@@ -1165,7 +1358,6 @@ fn test_report_too_early() {
     vault.report(Vault::WAD);
 }
 
-
 #[test]
 #[should_panic(expected: "Invalid new AUM: 1000000000000000000")]
 fn test_report_when_new_aum_is_zero() {
@@ -1184,7 +1376,6 @@ fn test_report_when_new_aum_is_zero() {
     vault.report(Vault::WAD);
 }
 
-
 #[test]
 #[should_panic(expected: "Liquidity is zero")]
 fn test_report_when_liquidity_is_zero() {
@@ -1202,7 +1393,6 @@ fn test_report_when_liquidity_is_zero() {
     cheat_caller_address_once(vault.contract_address, ORACLE());
     vault.report(Zero::zero());
 }
-
 
 #[test]
 #[should_panic(expected: "Vault allocator not set")]
@@ -1240,7 +1430,6 @@ fn test_report_when_vault_allocator_is_not_set() {
     vault.report(Zero::zero());
 }
 
-
 #[test]
 #[should_panic(expected: "Fees recipient not set")]
 fn test_report_when_fees_recipient_is_not_set() {
@@ -1277,7 +1466,6 @@ fn test_report_when_fees_recipient_is_not_set() {
     vault.report(Zero::zero());
 }
 
-
 fn check_vault_state(
     vault: IVaultDispatcher,
     expected_epoch: u256,
@@ -1285,7 +1473,7 @@ fn check_vault_state(
     expected_total_supply: u256,
     expected_aum: u256,
     expected_buffer: u256,
-    expected_redeem_nominal_and_redeem_assets: Array<(u256, u256)>,
+    expected_pending_redeem_nominal_and_redeem_assets: Array<(u256, u256)>,
 ) {
     let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
     let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
@@ -1293,11 +1481,12 @@ fn check_vault_state(
     assert(vault.epoch() == expected_epoch, 'Epoch not updated');
     assert(vault.handled_epoch_len() == expected_handled_epoch_len, 'Invalid handled epoch len');
     assert(erc20_vault_dispatcher.total_supply() == expected_total_supply, 'Invalid total supply');
+
     assert(vault.aum() == expected_aum, 'Invalid aum');
     assert(vault.buffer() == expected_buffer, 'Invalid buffer');
 
     assert(
-        expected_redeem_nominal_and_redeem_assets
+        expected_pending_redeem_nominal_and_redeem_assets
             .len()
             .into() == (expected_epoch - expected_handled_epoch_len)
             + 1,
@@ -1306,11 +1495,11 @@ fn check_vault_state(
 
     let mut total_redeem_assets = Zero::zero();
     let mut i = expected_handled_epoch_len;
-    while i < expected_epoch {
-        let (nominal, assets) = *expected_redeem_nominal_and_redeem_assets
-            .at(i.try_into().unwrap());
+    while i <= expected_epoch {
+        let (nominal, assets) = *expected_pending_redeem_nominal_and_redeem_assets
+            .at(i.try_into().unwrap() - expected_handled_epoch_len.try_into().unwrap());
         total_redeem_assets += assets;
-        assert(vault.redeem_assets(i) == total_redeem_assets, 'Invalid redeem assets');
+        assert(vault.redeem_assets(i) == assets, 'Invalid redeem assets');
         assert(vault.redeem_nominal(i) == nominal, 'Invalid redeem nominal');
         i += 1;
     }
@@ -1640,8 +1829,1054 @@ fn setup_report_simple_deposit_with_loss_epoch_1() -> (
     (underlying, vault, redeem_request)
 }
 
-
 #[test]
 fn test_report_simple_deposit_with_loss() {
     setup_report_simple_deposit_with_loss_epoch_1();
+}
+
+fn setup_report_simple_redeem_unhandled_with_profit_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let shares_to_redeem = Vault::WAD / 4;
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees, Vault::WAD + 1, current_supply + 1, Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 1, 'Epoch mismatch');
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply - remaining_shares_after_reem_fees;
+    let mut expected_aum = Vault::WAD;
+    let mut expected_buffer = Zero::zero();
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let profit_amount = current_aum / 100;
+    let new_aum = current_aum + profit_amount;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut = expected_nominal * expected_management_fees_assets / liqudity_after;
+    if (expected_nominal * expected_management_fees_assets % liqudity_after).is_non_zero() {
+        cut += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 = expected_nominal - cut;
+
+    let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    let management_fee_assets_for_shareholders = expected_management_fees_assets
+        - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
+
+    let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
+    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    let performance_fee_shares = math::u256_mul_div(
+        expected_performance_fee_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + performance_fee_shares;
+
+    expected_buffer = Zero::zero();
+    expected_epoch = 2;
+    expected_handled_epoch_len = 1;
+    expected_aum = new_aum + expected_buffer;
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets
+        .append((expected_nominal, expected_redeem_assets_after_cut_epoch_1));
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_report_simple_redeem_unhandled_with_profit() {
+    setup_report_simple_redeem_unhandled_with_profit_epoch_1();
+}
+
+fn setup_report_simple_redeem_matched_with_profit_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let other_dummy_deposit = 2 * Vault::WAD;
+
+    let erc20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_underlying_dispatcher.transfer(OTHER_DUMMY_ADDRESS(), other_dummy_deposit);
+
+    cheat_caller_address_once(underlying, OTHER_DUMMY_ADDRESS());
+    erc20_underlying_dispatcher.approve(vault.contract_address, other_dummy_deposit);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let new_shares_minted_by_other_dummy = erc4626_dispatcher
+        .deposit(other_dummy_deposit, OTHER_DUMMY_ADDRESS());
+
+    let shares_to_redeem = Vault::WAD / 4;
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees,
+        (Vault::WAD + other_dummy_deposit) + 1,
+        (current_supply + new_shares_minted_by_other_dummy) + 1,
+        Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 1, 'Epoch mismatch');
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply
+        + new_shares_minted_by_other_dummy
+        - remaining_shares_after_reem_fees;
+    let mut expected_aum = Vault::WAD;
+    let mut expected_buffer = other_dummy_deposit;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let profit_amount = current_aum / 100;
+    let new_aum = current_aum + profit_amount;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut = expected_nominal * expected_management_fees_assets / liqudity_after;
+    if (expected_nominal * expected_management_fees_assets % liqudity_after).is_non_zero() {
+        cut += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 = expected_nominal - cut;
+
+    let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    let management_fee_assets_for_shareholders = expected_management_fees_assets
+        - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
+
+    let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
+    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    let performance_fee_shares = math::u256_mul_div(
+        expected_performance_fee_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + performance_fee_shares;
+
+    expected_epoch = 2;
+    expected_handled_epoch_len = 2;
+    expected_aum = new_aum + expected_buffer - expected_redeem_assets_after_cut_epoch_1;
+    expected_buffer = Zero::zero();
+
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    assert(
+        vault.redeem_assets(1) == expected_redeem_assets_after_cut_epoch_1,
+        'Invalid redeem
+        assets',
+    );
+
+    // Epoch 2, post-rep
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_report_simple_redeem_matched_with_profit() {
+    setup_report_simple_redeem_matched_with_profit_epoch_1();
+}
+
+fn setup_report_simple_redeem_handled_with_bring_liquidity_with_profit_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let vault_allocator_refund = Vault::WAD / 2;
+    cheat_caller_address_once(underlying, VAULT_ALLOCATOR());
+    let erc20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+    erc20_underlying_dispatcher.approve(vault.contract_address, vault_allocator_refund);
+
+    cheat_caller_address_once(vault.contract_address, VAULT_ALLOCATOR());
+    vault.bring_liquidity(vault_allocator_refund);
+
+    let shares_to_redeem = Vault::WAD / 4;
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees, (Vault::WAD) + 1, (current_supply) + 1, Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 1, 'Epoch mismatch');
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply - remaining_shares_after_reem_fees;
+    let mut expected_aum = Vault::WAD / 2;
+    let mut expected_buffer = Vault::WAD / 2;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let profit_amount = current_aum / 100;
+    let new_aum = current_aum + profit_amount;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut = expected_nominal * expected_management_fees_assets / liqudity_after;
+    if (expected_nominal * expected_management_fees_assets % liqudity_after).is_non_zero() {
+        cut += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 = expected_nominal - cut;
+
+    let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    let management_fee_assets_for_shareholders = expected_management_fees_assets
+        - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
+
+    let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
+    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    let performance_fee_shares = math::u256_mul_div(
+        expected_performance_fee_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + performance_fee_shares;
+
+    expected_epoch = 2;
+    expected_handled_epoch_len = 2;
+    expected_aum = new_aum + expected_buffer - expected_redeem_assets_after_cut_epoch_1;
+    expected_buffer = Zero::zero();
+
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    assert(
+        vault.redeem_assets(1) == expected_redeem_assets_after_cut_epoch_1,
+        'Invalid redeem
+        assets',
+    );
+
+    // Epoch 2, post-rep
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_setup_report_simple_redeem_handled_with_bring_liquidity_with_profit_epoch_1() {
+    setup_report_simple_redeem_handled_with_bring_liquidity_with_profit_epoch_1();
+}
+
+fn setup_report_simple_redeem_not_handled_with_bring_liquidity_with_profit_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let vault_allocator_refund = Vault::WAD / 10;
+    cheat_caller_address_once(underlying, VAULT_ALLOCATOR());
+    let erc20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+    erc20_underlying_dispatcher.approve(vault.contract_address, vault_allocator_refund);
+
+    cheat_caller_address_once(vault.contract_address, VAULT_ALLOCATOR());
+    vault.bring_liquidity(vault_allocator_refund);
+
+    let shares_to_redeem = Vault::WAD / 4;
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees, (Vault::WAD) + 1, (current_supply) + 1, Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 1, 'Epoch mismatch');
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply - remaining_shares_after_reem_fees;
+    let mut expected_aum = Vault::WAD - vault_allocator_refund;
+    let mut expected_buffer = vault_allocator_refund;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let profit_amount = current_aum / 100;
+    let new_aum = current_aum + profit_amount;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut = expected_nominal * expected_management_fees_assets / liqudity_after;
+    if (expected_nominal * expected_management_fees_assets % liqudity_after).is_non_zero() {
+        cut += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 = expected_nominal - cut;
+
+    let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    let management_fee_assets_for_shareholders = expected_management_fees_assets
+        - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
+
+    let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
+    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    let performance_fee_shares = math::u256_mul_div(
+        expected_performance_fee_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + performance_fee_shares;
+
+    expected_epoch = 2;
+    expected_handled_epoch_len = 1;
+    expected_aum = new_aum;
+    expected_buffer = expected_buffer;
+
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets
+        .append((expected_nominal, expected_redeem_assets_after_cut_epoch_1));
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares,
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    assert(
+        vault.redeem_assets(1) == expected_redeem_assets_after_cut_epoch_1,
+        'Invalid redeem
+        assets',
+    );
+
+    // Epoch 2, post-rep
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_report_simple_redeem_not_handled_with_bring_liquidity_with_profit() {
+    setup_report_simple_redeem_not_handled_with_bring_liquidity_with_profit_epoch_1();
+}
+
+fn setup_report_simple_redeem_unhandled_with_loss_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let shares_to_redeem = Vault::WAD / 4;
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees, Vault::WAD + 1, current_supply + 1, Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 1, 'Epoch mismatch');
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply - remaining_shares_after_reem_fees;
+    let mut expected_aum = Vault::WAD;
+    let mut expected_buffer = Zero::zero();
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let loss_amount = current_aum / 100;
+    let new_aum = current_aum - loss_amount;
+
+    let liquidity_before = current_aum + expected_buffer;
+    let mut market_loss_cut = expected_nominal * loss_amount / liquidity_before;
+    if (expected_nominal * loss_amount % liquidity_before).is_non_zero() {
+        market_loss_cut += 1;
+    }
+    let expected_redeem_assets_after_market_loss_cut = expected_nominal - market_loss_cut;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut = expected_redeem_assets_after_market_loss_cut
+        * expected_management_fees_assets
+        / liqudity_after;
+    if (expected_redeem_assets_after_market_loss_cut
+        * expected_management_fees_assets % liqudity_after)
+        .is_non_zero() {
+        cut += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 = expected_redeem_assets_after_market_loss_cut
+        - cut;
+
+    let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    expected_buffer = Zero::zero();
+    expected_epoch = 2;
+    expected_handled_epoch_len = 1;
+    expected_aum = new_aum + expected_buffer;
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets
+        .append((expected_nominal, expected_redeem_assets_after_cut_epoch_1));
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares: Zero::zero(),
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    (underlying, vault, redeem_request)
+}
+
+#[test]
+fn test_report_simple_redeem_unhandled_with_loss() {
+    setup_report_simple_redeem_unhandled_with_loss_epoch_1();
+}
+
+fn setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) = setup_report_simple_deposit_epoch_0();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let current_timestamp = get_block_timestamp();
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let other_dummy_deposit = Vault::WAD / 8;
+
+    let erc20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_underlying_dispatcher.transfer(OTHER_DUMMY_ADDRESS(), other_dummy_deposit);
+
+    cheat_caller_address_once(underlying, OTHER_DUMMY_ADDRESS());
+    erc20_underlying_dispatcher.approve(vault.contract_address, other_dummy_deposit);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let new_shares_minted_by_other_dummy = erc4626_dispatcher
+        .deposit(other_dummy_deposit, OTHER_DUMMY_ADDRESS());
+
+    let shares_to_redeem = Vault::WAD / 4;
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, DUMMY_ADDRESS(), DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees,
+        Vault::WAD + other_dummy_deposit + 1,
+        current_supply + new_shares_minted_by_other_dummy + 1,
+        Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 1, 'Epoch mismatch');
+
+    // Epoch 1, pre-report state
+    let mut expected_epoch = 1;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply
+        + new_shares_minted_by_other_dummy
+        - remaining_shares_after_reem_fees;
+    let mut expected_aum = Vault::WAD;
+    let mut expected_buffer = other_dummy_deposit;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 2, post-report state
+    let current_aum = vault.aum();
+    let loss_amount = current_aum / 100;
+    let new_aum = current_aum - loss_amount;
+
+    let liquidity_before = current_aum + expected_buffer;
+    let mut market_loss_cut = expected_nominal * loss_amount / liquidity_before;
+    if (expected_nominal * loss_amount % liquidity_before).is_non_zero() {
+        market_loss_cut += 1;
+    }
+    let expected_redeem_assets_after_market_loss_cut = expected_nominal - market_loss_cut;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut = expected_redeem_assets_after_market_loss_cut
+        * expected_management_fees_assets
+        / liqudity_after;
+    if (expected_redeem_assets_after_market_loss_cut
+        * expected_management_fees_assets % liqudity_after)
+        .is_non_zero() {
+        cut += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 = expected_redeem_assets_after_market_loss_cut
+        - cut;
+
+    let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    expected_buffer = expected_buffer;
+    expected_epoch = 2;
+    expected_handled_epoch_len = 1;
+    expected_aum = new_aum;
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets
+        .append((expected_nominal, expected_redeem_assets_after_cut_epoch_1));
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares: Zero::zero(),
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    (underlying, vault, redeem_request)
+    //
+}
+
+#[test]
+fn test_report_simple_redeem_unhandled_not_enough_buffer_with_loss() {
+    setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_1();
+}
+
+fn setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_2_handled_epoch_1() -> (
+    ContractAddress, IVaultDispatcher, IRedeemRequestDispatcher,
+) {
+    let (underlying, vault, redeem_request) =
+        setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_1();
+    let erc20_vault_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    let current_supply = erc20_vault_dispatcher.total_supply();
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    let current_total_assets = erc4626_dispatcher.total_assets();
+    let current_timestamp = get_block_timestamp();
+    let current_aum = vault.aum();
+
+    start_cheat_block_timestamp_global(current_timestamp + REPORT_DELAY());
+
+    let current_nominal_epoch_1 = vault.redeem_nominal(1);
+    let current_assets_epoch_1 = vault.redeem_assets(1);
+    let current_buffer = vault.buffer();
+
+    let other_dummy_deposit = Vault::WAD;
+
+    let erc20_underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying };
+    cheat_caller_address_once(underlying, OWNER());
+    erc20_underlying_dispatcher.transfer(OTHER_DUMMY_ADDRESS(), other_dummy_deposit);
+
+    cheat_caller_address_once(underlying, OTHER_DUMMY_ADDRESS());
+    erc20_underlying_dispatcher.approve(vault.contract_address, other_dummy_deposit);
+
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let new_shares_minted_by_other_dummy = erc4626_dispatcher
+        .deposit(other_dummy_deposit, OTHER_DUMMY_ADDRESS());
+
+    let shares_to_redeem = new_shares_minted_by_other_dummy;
+    cheat_caller_address_once(vault.contract_address, OTHER_DUMMY_ADDRESS());
+    let redeem_request_id = vault
+        .request_redeem(shares_to_redeem, OTHER_DUMMY_ADDRESS(), OTHER_DUMMY_ADDRESS());
+
+    let expected_redeem_fee_shares = shares_to_redeem * REDEEM_FEES() / Vault::WAD;
+    let remaining_shares_after_reem_fees = shares_to_redeem - expected_redeem_fee_shares;
+    let expected_nominal = math::u256_mul_div(
+        remaining_shares_after_reem_fees,
+        current_total_assets + other_dummy_deposit + 1,
+        current_supply + new_shares_minted_by_other_dummy + 1,
+        Rounding::Floor,
+    );
+
+    let info = redeem_request.id_to_info(redeem_request_id);
+    assert(info.nominal == expected_nominal, 'Nominal mismatch');
+    assert(info.epoch == 2, 'Epoch mismatch');
+
+    // Epoch 2, pre-report state
+    let mut expected_epoch = 2;
+    let mut expected_handled_epoch_len = 1;
+    let mut expected_total_supply = current_supply
+        + new_shares_minted_by_other_dummy
+        - remaining_shares_after_reem_fees;
+    let mut expected_aum = current_aum;
+    let mut expected_buffer = other_dummy_deposit + current_buffer;
+    let mut expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets
+        .append((current_nominal_epoch_1, current_assets_epoch_1));
+    expected_redeem_nominal_and_redeem_assets.append((expected_nominal, expected_nominal));
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+
+    // Epoch 3, post-report state
+    let current_aum = vault.aum();
+    let loss_amount = current_aum / 100;
+    let new_aum = current_aum - loss_amount;
+
+    let liquidity_before = current_aum + expected_buffer;
+
+    let mut market_loss_cut_epoch_1 = current_assets_epoch_1 * loss_amount / liquidity_before;
+    if (current_assets_epoch_1 * loss_amount % liquidity_before).is_non_zero() {
+        market_loss_cut_epoch_1 += 1;
+    }
+    let expected_redeem_assets_after_market_loss_cut_epoch_1 = current_assets_epoch_1
+        - market_loss_cut_epoch_1;
+
+    let mut market_loss_cut_epoch_2 = expected_nominal * loss_amount / liquidity_before;
+    if (expected_nominal * loss_amount % liquidity_before).is_non_zero() {
+        market_loss_cut_epoch_2 += 1;
+    }
+    let expected_redeem_assets_after_market_loss_cut_epoch_2 = expected_nominal
+        - market_loss_cut_epoch_2;
+
+    let liqudity_after = new_aum + expected_buffer;
+    let mut expected_management_fees_assets = (liqudity_after
+        * MANAGEMENT_FEES()
+        * REPORT_DELAY().into())
+        / (Vault::WAD * Vault::YEAR.into());
+
+    let mut cut_epoch_1 = expected_redeem_assets_after_market_loss_cut_epoch_1
+        * expected_management_fees_assets
+        / liqudity_after;
+    if (expected_redeem_assets_after_market_loss_cut_epoch_1
+        * expected_management_fees_assets % liqudity_after)
+        .is_non_zero() {
+        cut_epoch_1 += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_1 =
+        expected_redeem_assets_after_market_loss_cut_epoch_1
+        - cut_epoch_1;
+
+    let mut cut_epoch_2 = expected_redeem_assets_after_market_loss_cut_epoch_2
+        * expected_management_fees_assets
+        / liqudity_after;
+    if (expected_redeem_assets_after_market_loss_cut_epoch_2
+        * expected_management_fees_assets % liqudity_after)
+        .is_non_zero() {
+        cut_epoch_2 += 1;
+    }
+    let expected_redeem_assets_after_cut_epoch_2 =
+        expected_redeem_assets_after_market_loss_cut_epoch_2
+        - cut_epoch_2;
+
+    let expected_total_assets = liqudity_after
+        - (expected_redeem_assets_after_cut_epoch_1 + expected_redeem_assets_after_cut_epoch_2);
+
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
+
+    expected_buffer = expected_buffer - expected_redeem_assets_after_cut_epoch_1;
+    expected_epoch = 3;
+    expected_handled_epoch_len = 2;
+    expected_aum = new_aum;
+    expected_redeem_nominal_and_redeem_assets = ArrayTrait::new();
+    expected_redeem_nominal_and_redeem_assets
+        .append((expected_nominal, expected_redeem_assets_after_cut_epoch_2));
+    expected_redeem_nominal_and_redeem_assets.append((Zero::zero(), Zero::zero()));
+
+    let mut spy = spy_events();
+    cheat_caller_address_once(vault.contract_address, ORACLE());
+    vault.report(new_aum);
+
+    spy
+        .assert_emitted(
+            @array![
+                (
+                    vault.contract_address,
+                    Vault::Event::Report(
+                        Vault::Report {
+                            new_epoch: expected_epoch,
+                            new_handled_epoch_len: expected_handled_epoch_len,
+                            total_supply: expected_total_supply,
+                            total_assets: expected_total_assets,
+                            management_fee_shares,
+                            performance_fee_shares: Zero::zero(),
+                        },
+                    ),
+                ),
+            ],
+        );
+
+    check_vault_state(
+        vault,
+        expected_epoch,
+        expected_handled_epoch_len,
+        expected_total_supply,
+        expected_aum,
+        expected_buffer,
+        expected_redeem_nominal_and_redeem_assets,
+    );
+    (underlying, vault, redeem_request)
+}
+
+
+#[test]
+fn test_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_2_handled_epoch_1() {
+    setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_2_handled_epoch_1();
 }
