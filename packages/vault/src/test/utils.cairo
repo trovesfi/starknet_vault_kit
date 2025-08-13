@@ -35,6 +35,14 @@ pub fn OTHER_DUMMY_ADDRESS() -> ContractAddress {
     'OTHER_DUMMY_ADDRESS'.try_into().unwrap()
 }
 
+pub fn USER1() -> ContractAddress {
+    'USER1'.try_into().unwrap()
+}
+
+pub fn USER2() -> ContractAddress {
+    'USER2'.try_into().unwrap()
+}
+
 
 pub fn VAULT_ALLOCATOR() -> ContractAddress {
     'VAULT_ALLOCATOR'.try_into().unwrap()
