@@ -19,14 +19,4 @@ pub trait IAvnuExchangeDecoderAndSanitizer<T> {
         integrator_fee_recipient: ContractAddress,
         routes: Array<Route>,
     ) -> Span<felt252>;
-    fn swap_exact_token_to(
-        self: @T,
-        sell_token_address: ContractAddress,
-        sell_token_amount: u256,
-        sell_token_max_amount: u256,
-        buy_token_address: ContractAddress,
-        buy_token_amount: u256,
-        beneficiary: ContractAddress,
-        routes: Array<Route>,
-    ) -> Span<felt252>;
 }

@@ -39,22 +39,5 @@ pub mod AvnuExchangeDecoderAndSanitizerComponent {
             Serde::serialize(@beneficiary, ref serialized_struct);
             serialized_struct.span()
         }
-
-        fn swap_exact_token_to(
-            self: @ComponentState<TContractState>,
-            sell_token_address: ContractAddress,
-            sell_token_amount: u256,
-            sell_token_max_amount: u256,
-            buy_token_address: ContractAddress,
-            buy_token_amount: u256,
-            beneficiary: ContractAddress,
-            routes: Array<Route>,
-        ) -> Span<felt252> {
-            let mut serialized_struct: Array<felt252> = ArrayTrait::new();
-            Serde::serialize(@sell_token_address, ref serialized_struct);
-            Serde::serialize(@buy_token_address, ref serialized_struct);
-            Serde::serialize(@beneficiary, ref serialized_struct);
-            serialized_struct.span()
-        }
     }
 }
