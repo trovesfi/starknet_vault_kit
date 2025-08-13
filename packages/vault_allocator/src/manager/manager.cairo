@@ -149,41 +149,6 @@ pub mod Manager {
         }
     }
 
-    // userData using intentHash.
-    //     bytes32 intentHash = keccak256(userData);
-    //     if (intentHash != flashLoanIntentHash) revert
-    //     ManagerWithMerkleVerification__BadFlashLoanIntentHash();
-    //     // reset intent hash to prevent replays.
-    //     flashLoanIntentHash = bytes32(0);
-
-    //     // Transfer tokens to vault.
-    //     for (uint256 i = 0; i < amounts.length; ++i) {
-    //         ERC20(tokens[i]).safeTransfer(address(vault), amounts[i]);
-    //     }
-    //     {
-    //         (
-    //             bytes32[][] memory manageProofs,
-    //             address[] memory decodersAndSanitizers,
-    //             address[] memory targets,
-    //             bytes[] memory data,
-    //             uint256[] memory values
-    //         ) = abi.decode(userData, (bytes32[][], address[], address[], bytes[], uint256[]));
-
-    //         ManagerWithMerkleVerification(address(this)).manageVaultWithMerkleVerification(
-    //             manageProofs, decodersAndSanitizers, targets, data, values
-    //         );
-    //     }
-
-    //     // Transfer tokens back to balancer.
-    //     // Have vault transfer amount + fees back to balancer
-    //     bytes[] memory transferData = new bytes[](amounts.length);
-    //     for (uint256 i; i < amounts.length; ++i) {
-    //         transferData[i] =
-    //             abi.encodeWithSelector(ERC20.transfer.selector, address(balancerVault),
-    //             (amounts[i] + feeAmounts[i]));
-    //     }
-    //     // Values is always zero, just pass in an array of zeroes.
-    //     vault.manage(tokens, transferData, new uint256[](amounts.length));
 
     #[abi(embed_v0)]
     impl ManagerImpl of IManager<ContractState> {
