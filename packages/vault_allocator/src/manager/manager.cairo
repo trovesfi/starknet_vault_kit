@@ -8,11 +8,13 @@ pub mod Manager {
     pub const OWNER_ROLE: felt252 = selector!("OWNER_ROLE");
     pub const PAUSER_ROLE: felt252 = selector!("PAUSER_ROLE");
     use core::hash::HashStateTrait;
+    use core::num::traits::Zero;
     use core::pedersen::PedersenTrait;
     use openzeppelin::access::accesscontrol::AccessControlComponent;
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::merkle_tree::merkle_proof;
     use openzeppelin::security::pausable::PausableComponent;
+    use openzeppelin::token::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
     use openzeppelin::upgrades::interface::IUpgradeable;
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use starknet::account::Call;
@@ -21,6 +23,9 @@ pub mod Manager {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_caller_address};
+    use vault_allocator::integration_interfaces::vesu::{
+        IFlashloanReceiver, ISingletonV2Dispatcher, ISingletonV2DispatcherTrait,
+    };
     use vault_allocator::manager::errors::Errors;
     use vault_allocator::manager::interface::IManager;
     use vault_allocator::vault_allocator::interface::{
@@ -43,7 +48,10 @@ pub mod Manager {
         #[substorage(v0)]
         pausable: PausableComponent::Storage,
         vault_allocator: IVaultAllocatorDispatcher,
+        vesu_singleton: ISingletonV2Dispatcher,
         manage_root: Map<ContractAddress, felt252>,
+        flash_loan_intent_hash: felt252,
+        performing_flash_loan: bool,
     }
 
     #[event]
@@ -58,7 +66,10 @@ pub mod Manager {
 
     #[constructor]
     fn constructor(
-        ref self: ContractState, owner: ContractAddress, vault_allocator: ContractAddress,
+        ref self: ContractState,
+        owner: ContractAddress,
+        vault_allocator: ContractAddress,
+        vesu_singleton: ContractAddress,
     ) {
         self.access_control.initializer();
         self.access_control.set_role_admin(OWNER_ROLE, OWNER_ROLE);
@@ -66,6 +77,7 @@ pub mod Manager {
         self.access_control._grant_role(OWNER_ROLE, owner);
         self.access_control._grant_role(PAUSER_ROLE, owner);
         self.vault_allocator.write(IVaultAllocatorDispatcher { contract_address: vault_allocator });
+        self.vesu_singleton.write(ISingletonV2Dispatcher { contract_address: vesu_singleton });
     }
 
 
@@ -87,6 +99,91 @@ pub mod Manager {
         }
     }
 
+    #[abi(embed_v0)]
+    impl ManagerFlashloanReceiverImpl of IFlashloanReceiver<ContractState> {
+        fn on_flash_loan(
+            ref self: ContractState,
+            sender: ContractAddress,
+            asset: ContractAddress,
+            amount: u256,
+            data: Span<felt252>,
+        ) {
+            let vesu_singleton = self.vesu_singleton.read().contract_address;
+            if (get_caller_address() != vesu_singleton) {
+                Errors::not_vesu_singleton();
+            }
+            let intent_hash = self._get_flash_loan_intent_hash_from_span(data);
+            if (intent_hash != self.flash_loan_intent_hash.read()) {
+                Errors::bad_flash_loan_intent_hash();
+            }
+            self.flash_loan_intent_hash.write(0);
+
+            let vault_allocator = self.vault_allocator.read();
+
+            ERC20ABIDispatcher { contract_address: asset }
+                .transfer(vault_allocator.contract_address, amount);
+
+            let mut data = data.clone();
+            let (proofs, decoder_and_sanitizers, targets, selectors, calldatas) = Serde::<
+                (
+                    Span<Span<felt252>>,
+                    Span<ContractAddress>,
+                    Span<ContractAddress>,
+                    Span<felt252>,
+                    Span<Span<felt252>>,
+                ),
+            >::deserialize(ref data)
+                .unwrap();
+            self
+                .manage_vault_with_merkle_verification(
+                    proofs, decoder_and_sanitizers, targets, selectors, calldatas,
+                );
+            let mut calldata = ArrayTrait::new();
+            vesu_singleton.serialize(ref calldata);
+            amount.serialize(ref calldata);
+
+            vault_allocator
+                .manage(
+                    Call { to: asset, selector: selector!("transfer"), calldata: calldata.span() },
+                );
+        }
+    }
+
+    // userData using intentHash.
+    //     bytes32 intentHash = keccak256(userData);
+    //     if (intentHash != flashLoanIntentHash) revert
+    //     ManagerWithMerkleVerification__BadFlashLoanIntentHash();
+    //     // reset intent hash to prevent replays.
+    //     flashLoanIntentHash = bytes32(0);
+
+    //     // Transfer tokens to vault.
+    //     for (uint256 i = 0; i < amounts.length; ++i) {
+    //         ERC20(tokens[i]).safeTransfer(address(vault), amounts[i]);
+    //     }
+    //     {
+    //         (
+    //             bytes32[][] memory manageProofs,
+    //             address[] memory decodersAndSanitizers,
+    //             address[] memory targets,
+    //             bytes[] memory data,
+    //             uint256[] memory values
+    //         ) = abi.decode(userData, (bytes32[][], address[], address[], bytes[], uint256[]));
+
+    //         ManagerWithMerkleVerification(address(this)).manageVaultWithMerkleVerification(
+    //             manageProofs, decodersAndSanitizers, targets, data, values
+    //         );
+    //     }
+
+    //     // Transfer tokens back to balancer.
+    //     // Have vault transfer amount + fees back to balancer
+    //     bytes[] memory transferData = new bytes[](amounts.length);
+    //     for (uint256 i; i < amounts.length; ++i) {
+    //         transferData[i] =
+    //             abi.encodeWithSelector(ERC20.transfer.selector, address(balancerVault),
+    //             (amounts[i] + feeAmounts[i]));
+    //     }
+    //     // Values is always zero, just pass in an array of zeroes.
+    //     vault.manage(tokens, transferData, new uint256[](amounts.length));
 
     #[abi(embed_v0)]
     impl ManagerImpl of IManager<ContractState> {
@@ -140,6 +237,26 @@ pub mod Manager {
                     .vault_allocator
                     .read()
                     .manage(Call { to: target, selector: selector, calldata: calldata });
+            }
+        }
+
+        fn flash_loan(
+            ref self: ContractState,
+            recipient: ContractAddress,
+            asset: ContractAddress,
+            amount: u256,
+            is_legacy: bool,
+            data: Span<felt252>,
+        ) {
+            if (get_caller_address() != self.vault_allocator.read().contract_address) {
+                Errors::not_vault_allocator();
+            }
+            self.flash_loan_intent_hash.write(self._get_flash_loan_intent_hash_from_span(data));
+            self.performing_flash_loan.write(true);
+            self.vesu_singleton.read().flash_loan(recipient, asset, amount, is_legacy, data);
+            self.performing_flash_loan.write(false);
+            if (self.flash_loan_intent_hash.read().is_non_zero()) {
+                Errors::flash_loan_not_executed();
             }
         }
     }
@@ -205,6 +322,19 @@ pub mod Manager {
             }
             let leaf_hash = state.finalize();
             merkle_proof::verify_pedersen(proof, root, leaf_hash)
+        }
+
+        fn _get_flash_loan_intent_hash_from_span(
+            self: @ContractState, data: Span<felt252>,
+        ) -> felt252 {
+            let mut serialized_struct: Array<felt252> = ArrayTrait::new();
+            data.serialize(ref serialized_struct);
+            let first_element = serialized_struct.pop_front().unwrap();
+            let mut state = PedersenTrait::new(first_element);
+            while let Some(value) = serialized_struct.pop_front() {
+                state = state.update(value);
+            }
+            state.finalize()
         }
     }
 }

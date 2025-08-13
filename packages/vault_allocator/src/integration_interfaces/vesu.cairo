@@ -10,149 +10,149 @@ pub trait ISingletonV2<
 > { // fn creator_nonce(self: @TContractState, creator: ContractAddress) -> felt252;
     fn extension(self: @TContractState, pool_id: felt252) -> ContractAddress;
     // fn asset_config_unsafe(
-//     self: @TContractState, pool_id: felt252, asset: ContractAddress,
-// ) -> (AssetConfig, u256);
-// fn asset_config(
-//     ref self: TContractState, pool_id: felt252, asset: ContractAddress,
-// ) -> (AssetConfig, u256);
-// fn ltv_config(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-// ) -> LTVConfig;
-// fn position_unsafe(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-// ) -> (Position, u256, u256);
-// fn position(
-//     ref self: TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-// ) -> (Position, u256, u256);
-// fn check_collateralization_unsafe(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-// ) -> (bool, u256, u256);
-// fn check_collateralization(
-//     ref self: TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-// ) -> (bool, u256, u256);
-// fn rate_accumulator_unsafe(
-//     self: @TContractState, pool_id: felt252, asset: ContractAddress,
-// ) -> u256;
-// fn rate_accumulator(ref self: TContractState, pool_id: felt252, asset: ContractAddress) ->
-// u256;
-// fn utilization_unsafe(self: @TContractState, pool_id: felt252, asset: ContractAddress) ->
-// u256;
-// fn utilization(ref self: TContractState, pool_id: felt252, asset: ContractAddress) -> u256;
-// fn delegation(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     delegator: ContractAddress,
-//     delegatee: ContractAddress,
-// ) -> bool;
-// fn calculate_pool_id(
-//     self: @TContractState, caller_address: ContractAddress, nonce: felt252,
-// ) -> felt252;
-// fn calculate_debt(
-//     self: @TContractState, nominal_debt: i257, rate_accumulator: u256, asset_scale: u256,
-// ) -> u256;
-// fn calculate_nominal_debt(
-//     self: @TContractState, debt: i257, rate_accumulator: u256, asset_scale: u256,
-// ) -> u256;
-// fn calculate_collateral_shares_unsafe(
-//     self: @TContractState, pool_id: felt252, asset: ContractAddress, collateral: i257,
-// ) -> u256;
-// fn calculate_collateral_shares(
-//     ref self: TContractState, pool_id: felt252, asset: ContractAddress, collateral: i257,
-// ) -> u256;
-// fn calculate_collateral_unsafe(
-//     self: @TContractState, pool_id: felt252, asset: ContractAddress, collateral_shares: i257,
-// ) -> u256;
-// fn calculate_collateral(
-//     ref self: TContractState, pool_id: felt252, asset: ContractAddress, collateral_shares:
-//     i257,
-// ) -> u256;
-// fn deconstruct_collateral_amount_unsafe(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-//     collateral: Amount,
-// ) -> (i257, i257);
-// fn deconstruct_collateral_amount(
-//     ref self: TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-//     collateral: Amount,
-// ) -> (i257, i257);
-// fn deconstruct_debt_amount_unsafe(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-//     debt: Amount,
-// ) -> (i257, i257);
-// fn deconstruct_debt_amount(
-//     ref self: TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-//     debt: Amount,
-// ) -> (i257, i257);
-// fn context_unsafe(
-//     self: @TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-// ) -> Context;
-// fn context(
-//     ref self: TContractState,
-//     pool_id: felt252,
-//     collateral_asset: ContractAddress,
-//     debt_asset: ContractAddress,
-//     user: ContractAddress,
-// ) -> Context;
-// fn create_pool(
-//     ref self: TContractState,
-//     asset_params: Span<AssetParams>,
-//     ltv_params: Span<LTVParams>,
-//     extension: ContractAddress,
-// ) -> felt252;
-// fn modify_position(
-//     ref self: TContractState, params: ModifyPositionParams,
-// ) -> UpdatePositionResponse;
-// fn transfer_position(ref self: TContractState, params: TransferPositionParams);
-// fn liquidate_position(
-//     ref self: TContractState, params: LiquidatePositionParams,
-// ) -> UpdatePositionResponse;
-// fn flash_loan(
-//     ref self: TContractState,
-//     receiver: ContractAddress,
-//     asset: ContractAddress,
-//     amount: u256,
-//     is_legacy: bool,
-//     data: Span<felt252>,
-// );
-// fn modify_delegation(
+    //     self: @TContractState, pool_id: felt252, asset: ContractAddress,
+    // ) -> (AssetConfig, u256);
+    // fn asset_config(
+    //     ref self: TContractState, pool_id: felt252, asset: ContractAddress,
+    // ) -> (AssetConfig, u256);
+    // fn ltv_config(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    // ) -> LTVConfig;
+    // fn position_unsafe(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    // ) -> (Position, u256, u256);
+    // fn position(
+    //     ref self: TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    // ) -> (Position, u256, u256);
+    // fn check_collateralization_unsafe(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    // ) -> (bool, u256, u256);
+    // fn check_collateralization(
+    //     ref self: TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    // ) -> (bool, u256, u256);
+    // fn rate_accumulator_unsafe(
+    //     self: @TContractState, pool_id: felt252, asset: ContractAddress,
+    // ) -> u256;
+    // fn rate_accumulator(ref self: TContractState, pool_id: felt252, asset: ContractAddress) ->
+    // u256;
+    // fn utilization_unsafe(self: @TContractState, pool_id: felt252, asset: ContractAddress) ->
+    // u256;
+    // fn utilization(ref self: TContractState, pool_id: felt252, asset: ContractAddress) -> u256;
+    // fn delegation(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     delegator: ContractAddress,
+    //     delegatee: ContractAddress,
+    // ) -> bool;
+    // fn calculate_pool_id(
+    //     self: @TContractState, caller_address: ContractAddress, nonce: felt252,
+    // ) -> felt252;
+    // fn calculate_debt(
+    //     self: @TContractState, nominal_debt: i257, rate_accumulator: u256, asset_scale: u256,
+    // ) -> u256;
+    // fn calculate_nominal_debt(
+    //     self: @TContractState, debt: i257, rate_accumulator: u256, asset_scale: u256,
+    // ) -> u256;
+    // fn calculate_collateral_shares_unsafe(
+    //     self: @TContractState, pool_id: felt252, asset: ContractAddress, collateral: i257,
+    // ) -> u256;
+    // fn calculate_collateral_shares(
+    //     ref self: TContractState, pool_id: felt252, asset: ContractAddress, collateral: i257,
+    // ) -> u256;
+    // fn calculate_collateral_unsafe(
+    //     self: @TContractState, pool_id: felt252, asset: ContractAddress, collateral_shares: i257,
+    // ) -> u256;
+    // fn calculate_collateral(
+    //     ref self: TContractState, pool_id: felt252, asset: ContractAddress, collateral_shares:
+    //     i257,
+    // ) -> u256;
+    // fn deconstruct_collateral_amount_unsafe(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    //     collateral: Amount,
+    // ) -> (i257, i257);
+    // fn deconstruct_collateral_amount(
+    //     ref self: TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    //     collateral: Amount,
+    // ) -> (i257, i257);
+    // fn deconstruct_debt_amount_unsafe(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    //     debt: Amount,
+    // ) -> (i257, i257);
+    // fn deconstruct_debt_amount(
+    //     ref self: TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    //     debt: Amount,
+    // ) -> (i257, i257);
+    // fn context_unsafe(
+    //     self: @TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    // ) -> Context;
+    // fn context(
+    //     ref self: TContractState,
+    //     pool_id: felt252,
+    //     collateral_asset: ContractAddress,
+    //     debt_asset: ContractAddress,
+    //     user: ContractAddress,
+    // ) -> Context;
+    // fn create_pool(
+    //     ref self: TContractState,
+    //     asset_params: Span<AssetParams>,
+    //     ltv_params: Span<LTVParams>,
+    //     extension: ContractAddress,
+    // ) -> felt252;
+    // fn modify_position(
+    //     ref self: TContractState, params: ModifyPositionParams,
+    // ) -> UpdatePositionResponse;
+    // fn transfer_position(ref self: TContractState, params: TransferPositionParams);
+    // fn liquidate_position(
+    //     ref self: TContractState, params: LiquidatePositionParams,
+    // ) -> UpdatePositionResponse;
+    fn flash_loan(
+        ref self: TContractState,
+        receiver: ContractAddress,
+        asset: ContractAddress,
+        amount: u256,
+        is_legacy: bool,
+        data: Span<felt252>,
+    );
+    // fn modify_delegation(
 //     ref self: TContractState, pool_id: felt252, delegatee: ContractAddress, delegation: bool,
 // );
 // fn donate_to_reserve(
@@ -383,4 +383,15 @@ pub trait IDefaultExtensionPOV2<
 // // Upgrade
 // fn upgrade_name(self: @TContractState) -> felt252;
 // fn upgrade(ref self: TContractState, new_implementation: ClassHash);
+}
+
+#[starknet::interface]
+pub trait IFlashloanReceiver<TContractState> {
+    fn on_flash_loan(
+        ref self: TContractState,
+        sender: ContractAddress,
+        asset: ContractAddress,
+        amount: u256,
+        data: Span<felt252>,
+    );
 }

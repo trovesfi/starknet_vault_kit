@@ -26,9 +26,9 @@ use starknet::{ContractAddress, get_block_timestamp};
 use vault::redeem_request::interface::{IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait};
 use vault::test::utils::{
     DUMMY_ADDRESS, FEES_RECIPIENT, MANAGEMENT_FEES, MAX_DELTA, ORACLE, OTHER_DUMMY_ADDRESS, OWNER,
-    PERFORMANCE_FEES, REDEEM_FEES, REPORT_DELAY, VAULT_ALLOCATOR, VAULT_NAME, VAULT_SYMBOL, between,
-    cheat_caller_address_once, deploy_counter, deploy_erc20_mock, deploy_redeem_request,
-    deploy_vault,
+    PAUSER, PERFORMANCE_FEES, REDEEM_FEES, REPORT_DELAY, USER1, USER2, VAULT_ALLOCATOR, VAULT_NAME,
+    VAULT_SYMBOL, between, cheat_caller_address_once, deploy_counter, deploy_erc20_mock,
+    deploy_redeem_request, deploy_vault,
 };
 use vault::vault::interface::{IVaultDispatcher, IVaultDispatcherTrait};
 use vault::vault::vault::Vault;

@@ -18,4 +18,14 @@ pub trait IManager<T> {
         selectors: Span<felt252>,
         calldatas: Span<Span<felt252>>,
     );
+
+    fn flash_loan(
+        ref self: T,
+        recipient: ContractAddress,
+        asset: ContractAddress,
+        amount: u256,
+        is_legacy: bool,
+        data: Span<felt252>,
+    );
 }
+
