@@ -15,7 +15,17 @@ pub mod manager {
 }
 
 pub mod integration_interfaces {
+    pub mod avnu;
+    pub mod price_router;
     pub mod vesu;
+}
+
+pub mod middlewares {
+    pub mod avnu_middleware {
+        pub mod avnu_middleware;
+        pub mod errors;
+        pub mod interface;
+    }
 }
 
 pub mod decoders_and_sanitizers {
