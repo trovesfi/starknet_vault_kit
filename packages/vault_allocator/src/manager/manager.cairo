@@ -22,12 +22,14 @@ pub mod Manager {
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
     };
-    use starknet::{ContractAddress, get_caller_address};
+    use starknet::{ContractAddress, get_caller_address, get_contract_address};
     use vault_allocator::integration_interfaces::vesu::{
         IFlashloanReceiver, ISingletonV2Dispatcher, ISingletonV2DispatcherTrait,
     };
     use vault_allocator::manager::errors::Errors;
-    use vault_allocator::manager::interface::IManager;
+    use vault_allocator::manager::interface::{
+        IManager, IManagerDispatcher, IManagerDispatcherTrait,
+    };
     use vault_allocator::vault_allocator::interface::{
         IVaultAllocatorDispatcher, IVaultAllocatorDispatcherTrait,
     };
@@ -119,9 +121,9 @@ pub mod Manager {
             self.flash_loan_intent_hash.write(0);
 
             let vault_allocator = self.vault_allocator.read();
+            let asset_dispatcher = ERC20ABIDispatcher { contract_address: asset };
 
-            ERC20ABIDispatcher { contract_address: asset }
-                .transfer(vault_allocator.contract_address, amount);
+            asset_dispatcher.transfer(vault_allocator.contract_address, amount);
 
             let mut data = data.clone();
             let (proofs, decoder_and_sanitizers, targets, selectors, calldatas) = Serde::<
@@ -134,24 +136,36 @@ pub mod Manager {
                 ),
             >::deserialize(ref data)
                 .unwrap();
-            self
+
+            let this = get_contract_address();
+            IManagerDispatcher { contract_address: this }
                 .manage_vault_with_merkle_verification(
                     proofs, decoder_and_sanitizers, targets, selectors, calldatas,
                 );
+
             let mut calldata = ArrayTrait::new();
-            vesu_singleton.serialize(ref calldata);
+            this.serialize(ref calldata);
             amount.serialize(ref calldata);
 
             vault_allocator
                 .manage(
                     Call { to: asset, selector: selector!("transfer"), calldata: calldata.span() },
                 );
+            asset_dispatcher.approve(vesu_singleton, amount);
         }
     }
 
 
     #[abi(embed_v0)]
     impl ManagerImpl of IManager<ContractState> {
+        fn vesu_singleton(self: @ContractState) -> ContractAddress {
+            self.vesu_singleton.read().contract_address
+        }
+
+        fn vault_allocator(self: @ContractState) -> ContractAddress {
+            self.vault_allocator.read().contract_address
+        }
+
         fn set_manage_root(ref self: ContractState, target: ContractAddress, root: felt252) {
             self.access_control.assert_only_role(OWNER_ROLE);
             self.manage_root.write(target, root);
@@ -239,7 +253,6 @@ pub mod Manager {
             calldata: Span<felt252>,
         ) {
             let mut packed_argument_addresses = ArrayTrait::new();
-
             let ret_data = starknet::syscalls::call_contract_syscall(
                 decoder_and_sanitizer, selector, calldata,
             );
@@ -252,6 +265,7 @@ pub mod Manager {
                 },
                 Err(revert_reason) => { panic!("revert_reason: {:?}", revert_reason); },
             }
+
             if (!self
                 ._verify_manage_proof(
                     root,

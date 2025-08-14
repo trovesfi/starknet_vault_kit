@@ -51,17 +51,17 @@ pub mod mocks {
     pub mod counter;
     pub mod erc20;
     pub mod erc4626;
+    pub mod flashloan;
 }
 
 #[cfg(test)]
 pub mod test {
     pub mod register;
     pub mod utils;
-    // pub mod units {
-    //     pub mod manager;
-    //     pub mod vault_allocator;
-    // }
-
+    pub mod units {
+        pub mod manager;
+        pub mod vault_allocator;
+    }
     pub mod integrations {
         pub mod vesu;
     }

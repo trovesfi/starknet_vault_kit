@@ -20,8 +20,8 @@ use vault_allocator::integration_interfaces::vesu::{
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
 use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, VESU_SINGLETON, wstETH};
 use vault_allocator::test::utils::{
-    ManageLeaf, OWNER, STRATEGIST, WAD, _add_vesu_leafs, _get_proofs_using_tree,
-    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_manager,
+    ManageLeaf, OWNER, STRATEGIST, WAD, _add_vesu_flash_loan_leafs, _add_vesu_leafs,
+    _get_proofs_using_tree, _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_manager,
     deploy_simple_decoder_and_sanitizer, deploy_vault_allocator, generate_merkle_tree,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
@@ -30,7 +30,7 @@ use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 #[test]
 fn test_manage_vault_with_merkle_verification_earn_mode() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator);
+    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
 
     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
@@ -267,9 +267,6 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
     let expected_shares_burn = v_token_erc4626_disp.preview_withdraw(assets_to_withdraw);
     let new_vault_shares_balance = v_token_erc20_disp.balance_of(vault_allocator.contract_address);
 
-    println!("new_vault_shares_balance: {}", new_vault_shares_balance);
-    println!("shares_balance_before_withdraw: {}", shares_balance_before_withdraw);
-    println!("expected_shares_burn: {}", expected_shares_burn);
     assert(
         new_vault_shares_balance <= shares_balance_before_withdraw - expected_shares_burn,
         'incorrect',
@@ -284,7 +281,7 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
 #[test]
 fn test_manage_vault_with_merkle_verification_debt_mode() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator);
+    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
 
     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
@@ -487,3 +484,40 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     let debt_asset_balance = debt_asset_disp.balance_of(vault_allocator.contract_address);
     assert(debt_asset_balance == debt_amount, 'incorrect');
 }
+// #[fork("MAINNET")]
+// #[test]
+// fn test_flash_loan() {
+//     let vault_allocator = deploy_vault_allocator();
+//     let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+//     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
+
+//     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
+//     let mut leaf_index: u256 = 0;
+
+//     _add_vesu_flash_loan_leafs(
+//         ref leafs,
+//         ref leaf_index,
+//         vault_allocator.contract_address,
+//         simple_decoder_and_sanitizer,
+//         manager.contract_address,
+//         wstETH(),
+//         false,
+//     );
+
+//     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
+//     let tree = generate_merkle_tree(leafs.span());
+
+//     let root = *tree.at(tree.len() - 1).at(0);
+//     cheat_caller_address_once(vault_allocator.contract_address, OWNER());
+//     vault_allocator.set_manager(manager.contract_address);
+
+//     cheat_caller_address_once(manager.contract_address, OWNER());
+//     manager.set_manage_root(STRATEGIST(), root);
+
+//     // Since the manager calls to itself to fulfill the flashloan, we need to set its root.
+//     cheat_caller_address_once(manager.contract_address, OWNER());
+//     manager.set_manage_root(manager.contract_address, root);
+
+// }
+
+

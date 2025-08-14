@@ -37,6 +37,7 @@ pub fn DUMMY_ADDRESS() -> ContractAddress {
     'DUMMY_ADDRESS'.try_into().unwrap()
 }
 
+
 pub fn deploy_vault_allocator() -> IVaultAllocatorDispatcher {
     let vault_allocator = declare("VaultAllocator").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
@@ -45,11 +46,14 @@ pub fn deploy_vault_allocator() -> IVaultAllocatorDispatcher {
     IVaultAllocatorDispatcher { contract_address: vault_allocator_address }
 }
 
-pub fn deploy_manager(vault_allocator: IVaultAllocatorDispatcher) -> IManagerDispatcher {
+pub fn deploy_manager(
+    vault_allocator: IVaultAllocatorDispatcher, vesu_singleton: ContractAddress,
+) -> IManagerDispatcher {
     let manager = declare("Manager").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
     OWNER().serialize(ref calldata);
     vault_allocator.contract_address.serialize(ref calldata);
+    vesu_singleton.serialize(ref calldata);
     let (manager_address, _) = manager.deploy(@calldata).unwrap();
     IManagerDispatcher { contract_address: manager_address }
 }
@@ -61,6 +65,13 @@ pub fn deploy_counter() -> (ICounterDispatcher, ClassHash) {
     initial_value.serialize(ref calldata);
     let (counter_address, _) = counter.deploy(@calldata).unwrap();
     (ICounterDispatcher { contract_address: counter_address }, *counter.class_hash)
+}
+
+pub fn deploy_flashloan_mock() -> ContractAddress {
+    let flashloan = declare("FlashLoanSingletonMock").unwrap().contract_class();
+    let mut calldata = ArrayTrait::new();
+    let (flashloan_address, _) = flashloan.deploy(@calldata).unwrap();
+    flashloan_address
 }
 
 pub fn deploy_erc4626_mock(underlying: ContractAddress) -> ContractAddress {
@@ -100,7 +111,7 @@ pub fn cheat_caller_address_once(
 }
 
 
-#[derive(PartialEq, Copy, Drop, Serde)]
+#[derive(PartialEq, Copy, Drop, Serde, Debug)]
 pub struct ManageLeaf {
     pub decoder_and_sanitizer: ContractAddress,
     pub target: ContractAddress,
@@ -175,9 +186,32 @@ fn _next_power_of_two(x: u256) -> u256 {
     }
     power
 }
+// pub fn _pad_leafs_to_power_of_two(ref leafs: Array<ManageLeaf>, ref leaf_index: u256) {
+//     let next_power = _next_power_of_two(leaf_index);
+//     let padding_needed = next_power - leaf_index;
+
+//     let default_leaf = ManageLeaf {
+//         decoder_and_sanitizer: Zero::zero(),
+//         target: Zero::zero(),
+//         selector: Zero::zero(),
+//         argument_addresses: ArrayTrait::new().span(),
+//     };
+
+//     let mut i = 0;
+//     while i < padding_needed {
+//         leafs.append(default_leaf);
+//         leaf_index += 1;
+//         i += 1;
+//     }
+// }
+
 pub fn _pad_leafs_to_power_of_two(ref leafs: Array<ManageLeaf>, ref leaf_index: u256) {
-    let next_power = _next_power_of_two(leaf_index);
-    let padding_needed = next_power - leaf_index;
+    let target_len = if leaf_index < 4_u256 {
+        4_u256
+    } else {
+        _next_power_of_two(leaf_index)
+    };
+    let padding_needed = target_len - leaf_index;
 
     let default_leaf = ManageLeaf {
         decoder_and_sanitizer: Zero::zero(),
@@ -186,13 +220,14 @@ pub fn _pad_leafs_to_power_of_two(ref leafs: Array<ManageLeaf>, ref leaf_index: 
         argument_addresses: ArrayTrait::new().span(),
     };
 
-    let mut i = 0;
+    let mut i: u256 = 0_u256;
     while i < padding_needed {
         leafs.append(default_leaf);
-        leaf_index += 1;
-        i += 1;
+        leaf_index += 1_u256;
+        i += 1_u256;
     }
 }
+
 
 pub fn _get_proofs_using_tree(
     leafs: Array<ManageLeaf>, tree: Array<Array<felt252>>,
@@ -444,3 +479,29 @@ pub fn _add_vesu_leafs(
     }
 }
 
+
+pub fn _add_vesu_flash_loan_leafs(
+    ref leafs: Array<ManageLeaf>,
+    ref leaf_index: u256,
+    vault: ContractAddress,
+    decoder_and_sanitizer: ContractAddress,
+    manager: ContractAddress,
+    asset: ContractAddress,
+    is_legacy: bool,
+) {
+    let mut argument_addresses = ArrayTrait::new();
+    manager.serialize(ref argument_addresses);
+    asset.serialize(ref argument_addresses);
+    is_legacy.serialize(ref argument_addresses);
+
+    leafs
+        .append(
+            ManageLeaf {
+                decoder_and_sanitizer,
+                target: manager,
+                selector: selector!("flash_loan"),
+                argument_addresses: argument_addresses.span(),
+            },
+        );
+    leaf_index += 1;
+}
