@@ -18,12 +18,20 @@ name = "MAINNET"
 url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
 block_id.tag = "latest"
 
+[[tool.snforge.fork]]
+name = "AVNU"
+url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+block_id.number = "1781028"
+
+
 
 
 [dependencies]
 starknet.workspace = true
 openzeppelin.workspace = true
 alexandria_math.workspace = true
+pragma_lib.workspace = true
+
 
 [dev-dependencies]
 snforge_std.workspace = true

@@ -4,6 +4,7 @@
 
 #[starknet::contract]
 pub mod SimpleDecoderAndSanitizer {
+    use vault_allocator::decoders_and_sanitizers::avnu_exchange_decoder_and_sanitizer::avnu_exchange_decoder_and_sanitizer::AvnuExchangeDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::base_decoder_and_sanitizer::BaseDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::erc4626_decoder_and_sanitizer::Erc4626DecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::vesu_decoder_and_sanitizer::VesuDecoderAndSanitizerComponent;
@@ -25,6 +26,12 @@ pub mod SimpleDecoderAndSanitizer {
         event: VesuDecoderAndSanitizerEvent,
     );
 
+    component!(
+        path: AvnuExchangeDecoderAndSanitizerComponent,
+        storage: avnu_exchange_decoder_and_sanitizer,
+        event: AvnuExchangeDecoderAndSanitizerEvent,
+    );
+
     #[abi(embed_v0)]
     impl BaseDecoderAndSanitizerImpl =
         BaseDecoderAndSanitizerComponent::BaseDecoderAndSanitizerImpl<ContractState>;
@@ -37,6 +44,12 @@ pub mod SimpleDecoderAndSanitizer {
     impl VesuDecoderAndSanitizerImpl =
         VesuDecoderAndSanitizerComponent::VesuDecoderAndSanitizerImpl<ContractState>;
 
+    #[abi(embed_v0)]
+    impl AvnuExchangeDecoderAndSanitizerImpl =
+        AvnuExchangeDecoderAndSanitizerComponent::AvnuExchangeDecoderAndSanitizerImpl<
+            ContractState,
+        >;
+
     #[storage]
     pub struct Storage {
         #[substorage(v0)]
@@ -45,6 +58,8 @@ pub mod SimpleDecoderAndSanitizer {
         pub erc4626_decoder_and_sanitizer: Erc4626DecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
         pub vesu_decoder_and_sanitizer: VesuDecoderAndSanitizerComponent::Storage,
+        #[substorage(v0)]
+        pub avnu_exchange_decoder_and_sanitizer: AvnuExchangeDecoderAndSanitizerComponent::Storage,
     }
 
     #[event]
@@ -56,5 +71,7 @@ pub mod SimpleDecoderAndSanitizer {
         Erc4626DecoderAndSanitizerEvent: Erc4626DecoderAndSanitizerComponent::Event,
         #[flat]
         VesuDecoderAndSanitizerEvent: VesuDecoderAndSanitizerComponent::Event,
+        #[flat]
+        AvnuExchangeDecoderAndSanitizerEvent: AvnuExchangeDecoderAndSanitizerComponent::Event,
     }
 }

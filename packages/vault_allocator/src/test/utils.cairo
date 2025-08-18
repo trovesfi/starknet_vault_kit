@@ -17,9 +17,17 @@ use vault_allocator::integration_interfaces::vesu::{
 };
 use vault_allocator::manager::interface::IManagerDispatcher;
 use vault_allocator::mocks::counter::ICounterDispatcher;
-use vault_allocator::test::register::VESU_SINGLETON;
+use vault_allocator::periphery::price_router::interface::{
+    IPriceRouterDispatcher, IPriceRouterDispatcherTrait,
+};
+use vault_allocator::test::register::{
+    AVNU_ROUTER, DAI, DAI_PRAGMA_ID, ETH, ETH_PRAGMA_ID, PRAGMA, STRK, STRK_PRAGMA_ID, USDC,
+    USDC_PRAGMA_ID, USDT, USDT_PRAGMA_ID, VESU_SINGLETON, WBTC, WBTC_PRAGMA_ID, wstETH,
+    wstETH_PRAGMA_ID,
+};
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcher;
 pub const WAD: u256 = 1_000_000_000_000_000_000;
+pub const INITIAL_SLIPPAGE_BPS: u256 = 100; // 1%
 
 pub fn OWNER() -> ContractAddress {
     'OWNER'.try_into().unwrap()
@@ -101,6 +109,50 @@ pub fn deploy_simple_decoder_and_sanitizer() -> ContractAddress {
         .deploy(@calldata)
         .unwrap();
     simple_decoder_and_sanitizer_address
+}
+
+pub fn deploy_price_router() -> ContractAddress {
+    let price_router = declare("PriceRouter").unwrap().contract_class();
+    let mut calldata = ArrayTrait::new();
+    OWNER().serialize(ref calldata);
+    PRAGMA().serialize(ref calldata);
+    let (price_router_address, _) = price_router.deploy(@calldata).unwrap();
+    price_router_address
+}
+
+pub fn initialize_price_router(price_router: ContractAddress) {
+    let price_router = IPriceRouterDispatcher { contract_address: price_router };
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(wstETH(), wstETH_PRAGMA_ID());
+
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(STRK(), STRK_PRAGMA_ID());
+
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(WBTC(), WBTC_PRAGMA_ID());
+
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(USDC(), USDC_PRAGMA_ID());
+
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(USDT(), USDT_PRAGMA_ID());
+
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(ETH(), ETH_PRAGMA_ID());
+
+    cheat_caller_address_once(price_router.contract_address, OWNER());
+    price_router.set_asset_to_id(DAI(), DAI_PRAGMA_ID());
+}
+
+pub fn deploy_avnu_middleware(price_router: ContractAddress) -> ContractAddress {
+    let avnu_middleware = declare("AvnuMiddleware").unwrap().contract_class();
+    let mut calldata = ArrayTrait::new();
+    OWNER().serialize(ref calldata);
+    AVNU_ROUTER().serialize(ref calldata);
+    price_router.serialize(ref calldata);
+    INITIAL_SLIPPAGE_BPS.serialize(ref calldata);
+    let (avnu_middleware_address, _) = avnu_middleware.deploy(@calldata).unwrap();
+    avnu_middleware_address
 }
 
 
@@ -504,4 +556,64 @@ pub fn _add_vesu_flash_loan_leafs(
             },
         );
     leaf_index += 1;
+}
+
+// ========================================= AVNU =========================================
+pub fn _add_avnu_leafs(
+    ref leafs: Array<ManageLeaf>,
+    ref leaf_index: u256,
+    vault: ContractAddress,
+    decoder_and_sanitizer: ContractAddress,
+    router: ContractAddress,
+    sell_and_buy_token_address: Array<(ContractAddress, ContractAddress)>,
+) {
+    // sell tokens déjà approuvés
+    let mut seen_sells: Array<ContractAddress> = ArrayTrait::new();
+
+    for i in 0..sell_and_buy_token_address.len() {
+        let (sell_token_address, buy_token_address) = *sell_and_buy_token_address.at(i);
+
+        // approve unique par sell_token_address
+        if !_contains_address(seen_sells.span(), sell_token_address) {
+            leafs
+                .append(
+                    ManageLeaf {
+                        decoder_and_sanitizer,
+                        target: sell_token_address,
+                        selector: selector!("approve"),
+                        argument_addresses: array![router.into()].span(),
+                    },
+                );
+            leaf_index += 1;
+            seen_sells.append(sell_token_address);
+        }
+
+        // swap leaf à chaque paire
+        let mut argument_addresses = ArrayTrait::new();
+        sell_token_address.serialize(ref argument_addresses);
+        buy_token_address.serialize(ref argument_addresses);
+        vault.serialize(ref argument_addresses);
+
+        leafs
+            .append(
+                ManageLeaf {
+                    decoder_and_sanitizer,
+                    target: router,
+                    selector: selector!("multi_route_swap"),
+                    argument_addresses: argument_addresses.span(),
+                },
+            );
+        leaf_index += 1;
+    }
+}
+
+fn _contains_address(span: Span<ContractAddress>, addr: ContractAddress) -> bool {
+    let mut i = 0;
+    while i < span.len() {
+        if *span.at(i) == addr {
+            return true;
+        }
+        i += 1;
+    }
+    false
 }

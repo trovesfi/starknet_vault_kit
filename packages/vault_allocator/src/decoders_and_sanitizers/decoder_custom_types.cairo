@@ -6,7 +6,7 @@ use alexandria_math::i257::i257;
 use starknet::ContractAddress;
 
 // AVNU EXCHANGE
-#[derive(Drop, Serde, Clone)]
+#[derive(Drop, Serde, Clone, Debug)]
 pub struct Route {
     pub sell_token: ContractAddress,
     pub buy_token: ContractAddress,

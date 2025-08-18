@@ -16,8 +16,15 @@ pub mod manager {
 
 pub mod integration_interfaces {
     pub mod avnu;
-    pub mod price_router;
     pub mod vesu;
+}
+
+pub mod periphery {
+    pub mod price_router {
+        pub mod errors;
+        pub mod interface;
+        pub mod price_router;
+    }
 }
 
 pub mod middlewares {
@@ -58,12 +65,13 @@ pub mod mocks {
 pub mod test {
     pub mod register;
     pub mod utils;
-    pub mod units {
-        pub mod manager;
-        pub mod vault_allocator;
-    }
+    // pub mod units {
+    //     pub mod manager;
+    //     pub mod vault_allocator;
+    // }
     pub mod integrations {
-        pub mod vesu;
+        pub mod avnu;
+        // pub mod vesu;
     }
 }
 

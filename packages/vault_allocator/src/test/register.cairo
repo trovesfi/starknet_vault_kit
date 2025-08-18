@@ -30,7 +30,7 @@ pub fn DAI() -> ContractAddress {
 }
 
 pub fn wstETH() -> ContractAddress {
-    0x042b8f0484674ca266ac5d08e4ac6a3fe65bd3129795def2dca5c34ecc5f96d2.try_into().unwrap()
+    0x0057912720381af14b0e5c87aa4718ed5e527eab60b3801ebf702ab09139e38b.try_into().unwrap()
 }
 
 
@@ -42,3 +42,44 @@ pub fn VESU_SINGLETON() -> ContractAddress {
 
 pub const GENESIS_POOL_ID: felt252 =
     2198503327643286920898110335698706244522220458610657370981979460625005526824;
+
+// PRAGMA
+
+pub fn PRAGMA() -> ContractAddress {
+    0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b.try_into().unwrap()
+}
+
+
+pub fn STRK_PRAGMA_ID() -> felt252 {
+    6004514686061859652.try_into().unwrap()
+}
+
+pub fn WBTC_PRAGMA_ID() -> felt252 {
+    6287680677296296772.try_into().unwrap()
+}
+
+pub fn USDC_PRAGMA_ID() -> felt252 {
+    6148332971638477636.try_into().unwrap()
+}
+
+pub fn USDT_PRAGMA_ID() -> felt252 {
+    6148333044652921668.try_into().unwrap()
+}
+
+pub fn ETH_PRAGMA_ID() -> felt252 {
+    19514442401534788.try_into().unwrap()
+}
+
+pub fn DAI_PRAGMA_ID() -> felt252 {
+    19212080998863684.try_into().unwrap()
+}
+
+pub fn wstETH_PRAGMA_ID() -> felt252 {
+    412383036120118613857092.try_into().unwrap()
+}
+
+
+// AVNU
+pub fn AVNU_ROUTER() -> ContractAddress {
+    0x04270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f.try_into().unwrap()
+}

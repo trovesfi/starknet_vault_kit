@@ -194,6 +194,12 @@ pub mod Manager {
         ) {
             self.pausable.assert_not_paused();
             let proofs_len = proofs.len();
+            println!("yooo");
+            println!("proofs_len: {:?}", proofs_len);
+            println!("decoder_and_sanitizers.len(): {:?}", decoder_and_sanitizers.len());
+            println!("targets.len(): {:?}", targets.len());
+            println!("selectors.len(): {:?}", selectors.len());
+            println!("calldatas.len(): {:?}", calldatas.len());
             if (proofs_len != decoder_and_sanitizers.len()
                 || proofs_len != targets.len()
                 || proofs_len != selectors.len()
