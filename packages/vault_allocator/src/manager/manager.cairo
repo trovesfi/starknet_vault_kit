@@ -194,12 +194,7 @@ pub mod Manager {
         ) {
             self.pausable.assert_not_paused();
             let proofs_len = proofs.len();
-            println!("yooo");
-            println!("proofs_len: {:?}", proofs_len);
-            println!("decoder_and_sanitizers.len(): {:?}", decoder_and_sanitizers.len());
-            println!("targets.len(): {:?}", targets.len());
-            println!("selectors.len(): {:?}", selectors.len());
-            println!("calldatas.len(): {:?}", calldatas.len());
+
             if (proofs_len != decoder_and_sanitizers.len()
                 || proofs_len != targets.len()
                 || proofs_len != selectors.len()
@@ -218,6 +213,7 @@ pub mod Manager {
                     ._verify_calldata(
                         strategist_root, proof, decoder_and_sanitizer, target, selector, calldata,
                     );
+
                 self
                     .vault_allocator
                     .read()
@@ -262,6 +258,7 @@ pub mod Manager {
             let ret_data = starknet::syscalls::call_contract_syscall(
                 decoder_and_sanitizer, selector, calldata,
             );
+
             match ret_data {
                 Ok(res) => {
                     let res_len: u32 = (*res.at(0)).try_into().unwrap();

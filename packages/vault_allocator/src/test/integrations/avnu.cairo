@@ -45,8 +45,6 @@ fn test_manage_vault_with_merkle_verification_avnu() {
 
     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
 
-    println!("leafs: {:?}", leafs);
-
     let tree = generate_merkle_tree(leafs.span());
     let root = *tree.at(tree.len() - 1).at(0);
     cheat_caller_address_once(vault_allocator.contract_address, OWNER());
@@ -139,12 +137,11 @@ fn test_manage_vault_with_merkle_verification_avnu() {
             },
         );
     routes.serialize(ref array_of_calldata_multi_route_swap);
-
     array_of_calldatas.append(array_of_calldata_multi_route_swap.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
-    manage_leafs.append(*leafs.at(1));
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
 
     cheat_caller_address_once(avnu_middleware, OWNER());
     IAvnuMiddlewareDispatcher { contract_address: avnu_middleware }
@@ -164,7 +161,6 @@ fn test_manage_vault_with_merkle_verification_avnu() {
 
     let new_wsteth_balance_vault_allocator = ERC20ABIDispatcher { contract_address: wstETH() }
         .balance_of(vault_allocator.contract_address);
-    println!("new_balance_wsteth_vault_allocator: {:?}", new_wsteth_balance_vault_allocator);
     assert(
         new_wsteth_balance_vault_allocator == initial_wsteth_balance - sell_amount,
         'incorrect sell amount',
@@ -172,6 +168,5 @@ fn test_manage_vault_with_merkle_verification_avnu() {
 
     let new_eth_balance_vault_allocator = ERC20ABIDispatcher { contract_address: ETH() }
         .balance_of(vault_allocator.contract_address);
-    println!("new_balance_eth_vault_allocator: {:?}", new_eth_balance_vault_allocator);
     assert(new_eth_balance_vault_allocator > Zero::zero(), 'incorrect');
 }

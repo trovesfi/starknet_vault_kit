@@ -9,6 +9,7 @@ pub mod VaultAllocator {
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use starknet::account::Call;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
+    use starknet::syscalls::call_contract_syscall;
     use starknet::{ContractAddress, SyscallResultTrait, get_caller_address};
     use vault_allocator::vault_allocator::errors::Errors;
     use vault_allocator::vault_allocator::interface::IVaultAllocator;
@@ -66,8 +67,7 @@ pub mod VaultAllocator {
 
         fn manage(ref self: ContractState, call: Call) -> Span<felt252> {
             self._only_manager();
-            starknet::syscalls::call_contract_syscall(call.to, call.selector, call.calldata)
-                .unwrap_syscall()
+            call_contract_syscall(call.to, call.selector, call.calldata).unwrap_syscall()
         }
 
         fn manage_multi(ref self: ContractState, calls: Array<Call>) -> Array<Span<felt252>> {
@@ -78,9 +78,7 @@ pub mod VaultAllocator {
                 let call = *calls.at(i);
                 results
                     .append(
-                        starknet::syscalls::call_contract_syscall(
-                            call.to, call.selector, call.calldata,
-                        )
+                        call_contract_syscall(call.to, call.selector, call.calldata)
                             .unwrap_syscall(),
                     );
             }

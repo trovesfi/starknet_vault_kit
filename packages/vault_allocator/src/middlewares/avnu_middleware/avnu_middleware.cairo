@@ -117,7 +117,6 @@ pub mod AvnuMiddleware {
                 .price_router
                 .read()
                 .get_value(sell_token_address, sell_token_amount, buy_token_address);
-            println!("quote_out: {:?}", quote_out);
 
             let computed_min = quote_out
                 * (10_000_u256 - self.slippage_tolerance_bps.read())
@@ -127,17 +126,7 @@ pub mod AvnuMiddleware {
             } else {
                 buy_token_min_amount
             };
-            println!("min_out: {:?}", min_out);
             let buy_bal_0 = buy.balance_of(this);
-            println!("sell_token_address: {:?}", sell_token_address);
-            println!("sell_token_amount: {:?}", sell_token_amount);
-            println!("buy_token_address: {:?}", buy_token_address);
-            println!("buy_token_amount: {:?}", buy_token_amount);
-            println!("min_out: {:?}", min_out);
-            println!("this: {:?}", this);
-            println!("integrator_fee_amount_bps: {:?}", integrator_fee_amount_bps);
-            println!("integrator_fee_recipient: {:?}", integrator_fee_recipient);
-            println!("routes: {:?}", routes);
 
             avnu
                 .multi_route_swap(

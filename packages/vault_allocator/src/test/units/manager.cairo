@@ -257,8 +257,8 @@ fn test_manage_vault_with_merkle_verification_invalid_proof() {
     array_of_calldatas.append(array_of_calldata_deposit.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
-    manage_leafs.append(*leafs.at(1));
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
 
     let proofs = _get_proofs_using_tree(manage_leafs, tree);
     manager
@@ -314,8 +314,8 @@ fn test_manage_vault_with_merkle_verification_valid_proof() {
     array_of_calldatas.append(array_of_calldata_deposit.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
-    manage_leafs.append(*leafs.at(1));
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
 
     let proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -453,7 +453,7 @@ fn test_flash_loan_not_executed() {
     array_of_calldatas.append(array_of_calldatas_flash_loan.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
+    manage_leafs.append(leafs.at(0).clone());
 
     let proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -545,7 +545,7 @@ fn test_flash_loan_bad_flash_loan_intent_hash() {
     array_of_calldatas.append(array_of_calldatas_flash_loan.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
+    manage_leafs.append(leafs.at(0).clone());
 
     let proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -600,6 +600,7 @@ fn test_flash_loan_bad_flash_loan() {
                 target: underlying,
                 selector: selector!("approve"),
                 argument_addresses: argument_addresses_approve.span(),
+                description: "",
             },
         );
 
@@ -615,6 +616,7 @@ fn test_flash_loan_bad_flash_loan() {
                 target: flashloan_mock,
                 selector: selector!("approve"),
                 argument_addresses: argument_addresses_fake_approve_func.span(),
+                description: "Approve",
             },
         );
     leaf_index += 1;
@@ -675,8 +677,8 @@ fn test_flash_loan_bad_flash_loan() {
     flash_loan_data_calldata.append(flash_loan_data_calldata_approve_fake.span());
 
     let mut flash_loan_manager_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    flash_loan_manager_leafs.append(*leafs.at(1));
-    flash_loan_manager_leafs.append(*leafs.at(2));
+    flash_loan_manager_leafs.append(leafs.at(1).clone());
+    flash_loan_manager_leafs.append(leafs.at(2).clone());
 
     let mut flash_loan_proofs = _get_proofs_using_tree(flash_loan_manager_leafs, tree.clone());
 
@@ -694,7 +696,7 @@ fn test_flash_loan_bad_flash_loan() {
     array_of_calldatas.append(array_of_calldatas_flash_loan.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
+    manage_leafs.append(leafs.at(0).clone());
 
     let proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 

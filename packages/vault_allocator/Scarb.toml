@@ -24,6 +24,15 @@ url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
 block_id.number = "1781028"
 
 
+[[tool.snforge.fork]]
+name = "SSCL"
+url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+block_id.number = "1784627"
+
+
+
+
+
 
 
 [dependencies]

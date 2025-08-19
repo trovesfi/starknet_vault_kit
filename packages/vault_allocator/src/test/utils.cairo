@@ -9,8 +9,10 @@ use openzeppelin::merkle_tree::hashes::PedersenCHasher;
 use openzeppelin::token::erc20::extensions::erc4626::interface::{
     IERC4626Dispatcher, IERC4626DispatcherTrait,
 };
+use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use snforge_std::{CheatSpan, ContractClassTrait, DeclareResultTrait, cheat_caller_address, declare};
-use starknet::{ClassHash, ContractAddress};
+use starknet::syscalls::call_contract_syscall;
+use starknet::{ClassHash, ContractAddress, SyscallResultTrait};
 use vault_allocator::integration_interfaces::vesu::{
     IDefaultExtensionPOV2Dispatcher, IDefaultExtensionPOV2DispatcherTrait, ISingletonV2Dispatcher,
     ISingletonV2DispatcherTrait,
@@ -28,6 +30,8 @@ use vault_allocator::test::register::{
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcher;
 pub const WAD: u256 = 1_000_000_000_000_000_000;
 pub const INITIAL_SLIPPAGE_BPS: u256 = 100; // 1%
+use core::to_byte_array::FormatAsByteArray;
+
 
 pub fn OWNER() -> ContractAddress {
     'OWNER'.try_into().unwrap()
@@ -163,12 +167,13 @@ pub fn cheat_caller_address_once(
 }
 
 
-#[derive(PartialEq, Copy, Drop, Serde, Debug)]
+#[derive(PartialEq, Drop, Serde, Debug, Clone)]
 pub struct ManageLeaf {
     pub decoder_and_sanitizer: ContractAddress,
     pub target: ContractAddress,
     pub selector: felt252,
     pub argument_addresses: Span<felt252>,
+    pub description: ByteArray,
 }
 
 
@@ -265,16 +270,18 @@ pub fn _pad_leafs_to_power_of_two(ref leafs: Array<ManageLeaf>, ref leaf_index: 
     };
     let padding_needed = target_len - leaf_index;
 
-    let default_leaf = ManageLeaf {
-        decoder_and_sanitizer: Zero::zero(),
-        target: Zero::zero(),
-        selector: Zero::zero(),
-        argument_addresses: ArrayTrait::new().span(),
-    };
-
     let mut i: u256 = 0_u256;
     while i < padding_needed {
-        leafs.append(default_leaf);
+        leafs
+            .append(
+                ManageLeaf {
+                    decoder_and_sanitizer: Zero::zero(),
+                    target: Zero::zero(),
+                    selector: Zero::zero(),
+                    argument_addresses: ArrayTrait::new().span(),
+                    description: "",
+                },
+            );
         leaf_index += 1_u256;
         i += 1_u256;
     }
@@ -286,7 +293,7 @@ pub fn _get_proofs_using_tree(
 ) -> Array<Span<felt252>> {
     let mut proofs = ArrayTrait::new();
     for i in 0..leafs.len() {
-        let leaf = *leafs.at(i);
+        let leaf = leafs.at(i);
         let mut serialized_struct: Array<felt252> = ArrayTrait::new();
         leaf.decoder_and_sanitizer.serialize(ref serialized_struct);
         leaf.target.serialize(ref serialized_struct);
@@ -339,7 +346,8 @@ pub fn _add_erc4626_leafs(
     decoder_and_sanitizer: ContractAddress,
     erc4626: ContractAddress,
 ) {
-    let asset = IERC4626Dispatcher { contract_address: erc4626 }.asset();
+    let erc4626_erc4646_disp = IERC4626Dispatcher { contract_address: erc4626 };
+    let asset = erc4626_erc4646_disp.asset();
 
     // Approvals
     leafs
@@ -349,6 +357,13 @@ pub fn _add_erc4626_leafs(
                 target: asset,
                 selector: selector!("approve"),
                 argument_addresses: array![erc4626.into()].span(),
+                description: "Approve"
+                    + " "
+                    + get_symbol(erc4626)
+                    + " "
+                    + "to spend"
+                    + " "
+                    + get_symbol(asset),
             },
         );
     leaf_index += 1;
@@ -362,6 +377,13 @@ pub fn _add_erc4626_leafs(
                 target: erc4626,
                 selector: selector!("deposit"),
                 argument_addresses: array![vault.into()].span(),
+                description: "Deposit"
+                    + " "
+                    + get_symbol(asset)
+                    + " "
+                    + "for"
+                    + " "
+                    + get_symbol(erc4626),
             },
         );
     leaf_index += 1;
@@ -375,6 +397,13 @@ pub fn _add_erc4626_leafs(
                 target: erc4626,
                 selector: selector!("withdraw"),
                 argument_addresses: array![vault.into(), vault.into()].span(),
+                description: "Withdraw"
+                    + " "
+                    + get_symbol(asset)
+                    + " "
+                    + "from"
+                    + " "
+                    + get_symbol(erc4626),
             },
         );
     leaf_index += 1;
@@ -388,6 +417,13 @@ pub fn _add_erc4626_leafs(
                 target: erc4626,
                 selector: selector!("mint"),
                 argument_addresses: array![vault.into()].span(),
+                description: "Mint"
+                    + " "
+                    + get_symbol(erc4626)
+                    + " "
+                    + "from"
+                    + " "
+                    + get_symbol(asset),
             },
         );
     leaf_index += 1;
@@ -401,6 +437,13 @@ pub fn _add_erc4626_leafs(
                 target: erc4626,
                 selector: selector!("redeem"),
                 argument_addresses: array![vault.into(), vault.into()].span(),
+                description: "Redeem"
+                    + " "
+                    + get_symbol(erc4626)
+                    + " "
+                    + "for"
+                    + " "
+                    + get_symbol(asset),
             },
         );
     leaf_index += 1;
@@ -438,6 +481,34 @@ pub fn _add_vesu_leafs(
         let debt_assets_len = debt_assets.len();
         if debt_assets_len > 0 {
             for j in 0..debt_assets_len {
+                let mut pool_id_str: ByteArray = FormatAsByteArray::format_as_byte_array(
+                    @pool_id, 16,
+                );
+
+                // can be performed via transfering the v-token with transfer_position
+                // or can be performed via modify_position directly
+
+                // APPROVAL of collateral asset to the singleton
+                leafs
+                    .append(
+                        ManageLeaf {
+                            decoder_and_sanitizer,
+                            target: collateral_asset,
+                            selector: selector!("approve"),
+                            argument_addresses: array![VESU_SINGLETON().into()].span(),
+                            description: "Approve"
+                                + " "
+                                + "singleton"
+                                + "_"
+                                + pool_id_str.clone()
+                                + " "
+                                + "to spend"
+                                + " "
+                                + get_symbol(collateral_asset),
+                        },
+                    );
+                leaf_index += 1;
+
                 // APPROVAL of v-token to the extension
                 leafs
                     .append(
@@ -447,6 +518,15 @@ pub fn _add_vesu_leafs(
                             selector: selector!("approve"),
                             argument_addresses: array![pool_extension.contract_address.into()]
                                 .span(),
+                            description: "Approve"
+                                + " "
+                                + "extension_pid"
+                                + "_"
+                                + pool_id_str.clone()
+                                + " "
+                                + "to spend"
+                                + " "
+                                + get_symbol(v_token),
                         },
                     );
                 leaf_index += 1;
@@ -493,6 +573,19 @@ pub fn _add_vesu_leafs(
                             target: singleton.contract_address,
                             selector: selector!("transfer_position"),
                             argument_addresses: argument_addresses_transfer_position.span(),
+                            description: "Transfer position"
+                                + " "
+                                + "extension_pid"
+                                + "_"
+                                + pool_id_str.clone()
+                                + " "
+                                + "with collateral"
+                                + " "
+                                + get_symbol(collateral_asset)
+                                + " "
+                                + "and debt"
+                                + " "
+                                + get_symbol(debt_asset),
                         },
                     );
                 leaf_index += 1;
@@ -523,6 +616,19 @@ pub fn _add_vesu_leafs(
                             target: singleton.contract_address,
                             selector: selector!("modify_position"),
                             argument_addresses: argument_addresses_modify_position.span(),
+                            description: "Modify position"
+                                + " "
+                                + "extension_pid"
+                                + "_"
+                                + pool_id_str
+                                + " "
+                                + "with collateral"
+                                + " "
+                                + get_symbol(collateral_asset)
+                                + " "
+                                + "and debt"
+                                + " "
+                                + get_symbol(debt_asset),
                         },
                     );
                 leaf_index += 1;
@@ -553,6 +659,7 @@ pub fn _add_vesu_flash_loan_leafs(
                 target: manager,
                 selector: selector!("flash_loan"),
                 argument_addresses: argument_addresses.span(),
+                description: "Flash loan" + " " + get_symbol(asset),
             },
         );
     leaf_index += 1;
@@ -567,13 +674,11 @@ pub fn _add_avnu_leafs(
     router: ContractAddress,
     sell_and_buy_token_address: Array<(ContractAddress, ContractAddress)>,
 ) {
-    // sell tokens déjà approuvés
     let mut seen_sells: Array<ContractAddress> = ArrayTrait::new();
 
     for i in 0..sell_and_buy_token_address.len() {
         let (sell_token_address, buy_token_address) = *sell_and_buy_token_address.at(i);
 
-        // approve unique par sell_token_address
         if !_contains_address(seen_sells.span(), sell_token_address) {
             leafs
                 .append(
@@ -582,6 +687,13 @@ pub fn _add_avnu_leafs(
                         target: sell_token_address,
                         selector: selector!("approve"),
                         argument_addresses: array![router.into()].span(),
+                        description: "Approve"
+                            + " "
+                            + "avnu_router"
+                            + " "
+                            + "to spend"
+                            + " "
+                            + get_symbol(sell_token_address),
                     },
                 );
             leaf_index += 1;
@@ -601,6 +713,13 @@ pub fn _add_avnu_leafs(
                     target: router,
                     selector: selector!("multi_route_swap"),
                     argument_addresses: argument_addresses.span(),
+                    description: "Multi route swap"
+                        + " "
+                        + get_symbol(sell_token_address)
+                        + " "
+                        + "for"
+                        + " "
+                        + get_symbol(buy_token_address),
                 },
             );
         leaf_index += 1;
@@ -616,4 +735,42 @@ fn _contains_address(span: Span<ContractAddress>, addr: ContractAddress) -> bool
         i += 1;
     }
     false
+}
+
+
+fn get_symbol(contract_address: ContractAddress) -> ByteArray {
+    let ret_data = call_contract_syscall(contract_address, selector!("symbol"), array![].span());
+    match ret_data {
+        Ok(res) => {
+            let res_len: u32 = res.len();
+            if (res_len == 1) {
+                let symbol_felt = *res.at(0);
+                let mut symbol_byte_array: ByteArray = "";
+                symbol_byte_array.append_word(symbol_felt, bytes_in_felt(symbol_felt));
+                symbol_byte_array
+            } else {
+                let mut res_span = res;
+                Serde::<ByteArray>::deserialize(ref res_span).unwrap()
+            }
+        },
+        Err(revert_reason) => { panic!("revert_reason: {:?}", revert_reason); },
+    }
+}
+
+
+fn bytes_in_felt(word: felt252) -> usize {
+    if word == 0 {
+        return 0;
+    }
+    let x: u256 = word.try_into().unwrap();
+
+    let mut p: u256 = 1_u256;
+    let mut bytes: usize = 0;
+
+    while p <= x && bytes < 31 {
+        p = p * 256_u256;
+        bytes += 1;
+    }
+
+    bytes
 }

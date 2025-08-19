@@ -105,8 +105,8 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
     array_of_calldatas.append(array_of_calldata_deposit.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
-    manage_leafs.append(*leafs.at(1));
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -151,7 +151,7 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
     array_of_calldatas.append(array_of_calldata_redeem.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(4));
+    manage_leafs.append(leafs.at(4).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -206,8 +206,8 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
     array_of_calldatas.append(array_of_calldata_mint.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
-    manage_leafs.append(*leafs.at(3));
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(3).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -248,7 +248,7 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
     array_of_calldatas.append(array_of_calldata_withdraw.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(2));
+    manage_leafs.append(leafs.at(2).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 
@@ -456,11 +456,11 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     array_of_calldatas.append(array_of_calldata_modify_position.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(*leafs.at(0));
-    manage_leafs.append(*leafs.at(1));
-    manage_leafs.append(*leafs.at(5));
-    manage_leafs.append(*leafs.at(6));
-    manage_leafs.append(*leafs.at(7));
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
+    manage_leafs.append(leafs.at(6).clone());
+    manage_leafs.append(leafs.at(7).clone());
+    manage_leafs.append(leafs.at(8).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
     cheat_caller_address_once(manager.contract_address, STRATEGIST());
@@ -484,40 +484,3 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     let debt_asset_balance = debt_asset_disp.balance_of(vault_allocator.contract_address);
     assert(debt_asset_balance == debt_amount, 'incorrect');
 }
-// #[fork("MAINNET")]
-// #[test]
-// fn test_flash_loan() {
-//     let vault_allocator = deploy_vault_allocator();
-//     let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
-//     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
-
-//     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
-//     let mut leaf_index: u256 = 0;
-
-//     _add_vesu_flash_loan_leafs(
-//         ref leafs,
-//         ref leaf_index,
-//         vault_allocator.contract_address,
-//         simple_decoder_and_sanitizer,
-//         manager.contract_address,
-//         wstETH(),
-//         false,
-//     );
-
-//     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
-//     let tree = generate_merkle_tree(leafs.span());
-
-//     let root = *tree.at(tree.len() - 1).at(0);
-//     cheat_caller_address_once(vault_allocator.contract_address, OWNER());
-//     vault_allocator.set_manager(manager.contract_address);
-
-//     cheat_caller_address_once(manager.contract_address, OWNER());
-//     manager.set_manage_root(STRATEGIST(), root);
-
-//     // Since the manager calls to itself to fulfill the flashloan, we need to set its root.
-//     cheat_caller_address_once(manager.contract_address, OWNER());
-//     manager.set_manage_root(manager.contract_address, root);
-
-// }
-
-
