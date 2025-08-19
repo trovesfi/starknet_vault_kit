@@ -29,6 +29,13 @@ name = "SSCL"
 url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
 block_id.number = "1784627"
 
+[[tool.snforge.fork]]
+name = "SLLSE"
+url = "https://starknet-mainnet.public.blastapi.io/rpc/v0_8"
+block_id.number = "1794270"
+
+
+
 
 
 

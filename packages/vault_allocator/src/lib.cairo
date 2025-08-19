@@ -75,6 +75,7 @@ pub mod test {
     }
 
     pub mod scenarios {
+        pub mod leveraged_loop_staked_ether;
         pub mod stable_carry_loop;
     }
 }
