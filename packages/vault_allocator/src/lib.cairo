@@ -64,6 +64,7 @@ pub mod mocks {
 
 #[cfg(test)]
 pub mod test {
+    pub mod creator;
     pub mod register;
     pub mod utils;
     pub mod units {

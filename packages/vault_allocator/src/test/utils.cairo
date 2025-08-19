@@ -173,24 +173,25 @@ pub struct ManageLeaf {
     pub description: ByteArray,
 }
 
+pub fn get_leaf_hash(leaf: ManageLeaf) -> felt252 {
+    let mut serialized_struct: Array<felt252> = ArrayTrait::new();
+    leaf.decoder_and_sanitizer.serialize(ref serialized_struct);
+    leaf.target.serialize(ref serialized_struct);
+    leaf.selector.serialize(ref serialized_struct);
+    leaf.argument_addresses.serialize(ref serialized_struct);
+    let first_element = serialized_struct.pop_front().unwrap();
+    let mut state = PedersenTrait::new(first_element);
+    while let Some(value) = serialized_struct.pop_front() {
+        state = state.update(value);
+    }
+    state.finalize()
+}
 
 pub fn generate_merkle_tree(manage_leafs: Span<ManageLeaf>) -> Array<Array<felt252>> {
     let mut first_layer = ArrayTrait::new();
     let leafs_length = manage_leafs.len();
     for i in 0..leafs_length {
-        let mut serialized_struct: Array<felt252> = ArrayTrait::new();
-        manage_leafs[i].decoder_and_sanitizer.serialize(ref serialized_struct);
-        manage_leafs[i].target.serialize(ref serialized_struct);
-        manage_leafs[i].selector.serialize(ref serialized_struct);
-        manage_leafs[i].argument_addresses.serialize(ref serialized_struct);
-        let first_element = serialized_struct.pop_front().unwrap();
-        let mut state = PedersenTrait::new(first_element);
-
-        while let Some(value) = serialized_struct.pop_front() {
-            state = state.update(value);
-        }
-        let leaf_hash = state.finalize();
-        first_layer.append(leaf_hash);
+        first_layer.append(get_leaf_hash(manage_leafs.at(i).clone()));
     }
     let mut leafs = ArrayTrait::new();
     leafs.append(first_layer);
