@@ -8,8 +8,6 @@ pub mod vault {
     pub mod vault;
 }
 
-// waiting for openzeppelin to release vault with external assets
-pub mod oz_4626;
 
 pub mod redeem_request {
     pub mod errors;

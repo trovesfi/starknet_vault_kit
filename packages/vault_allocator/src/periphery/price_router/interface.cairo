@@ -2,8 +2,9 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
-use pragma_lib::types::PragmaPricesResponse;
 use starknet::ContractAddress;
+use vault_allocator::integration_interfaces::pragma::PragmaPricesResponse;
+
 
 #[starknet::interface]
 pub trait IPriceRouter<T> {

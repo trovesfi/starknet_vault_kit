@@ -2,12 +2,12 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
-use openzeppelin::access::accesscontrol::interface::{
+use openzeppelin::interfaces::accesscontrol::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
-use openzeppelin::security::interface::{IPausableDispatcher, IPausableDispatcherTrait};
-use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
-use openzeppelin::upgrades::interface::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::security::pausable::{IPausableDispatcher, IPausableDispatcherTrait};
+use openzeppelin::interfaces::upgrades::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
 use starknet::ContractAddress;
 use vault_allocator::integration_interfaces::vesu::{
     IFlashloanReceiverDispatcher, IFlashloanReceiverDispatcherTrait,
@@ -26,9 +26,7 @@ use vault_allocator::test::utils::{
     deploy_flashloan_mock, deploy_manager, deploy_simple_decoder_and_sanitizer,
     deploy_vault_allocator, generate_merkle_tree,
 };
-use vault_allocator::vault_allocator::interface::{
-    IVaultAllocatorDispatcher, IVaultAllocatorDispatcherTrait,
-};
+use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 
 #[test]
 fn test_constructor() {

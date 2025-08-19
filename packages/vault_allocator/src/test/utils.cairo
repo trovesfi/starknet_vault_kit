@@ -5,14 +5,11 @@
 use core::hash::HashStateTrait;
 use core::num::traits::Zero;
 use core::pedersen::PedersenTrait;
+use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
 use openzeppelin::merkle_tree::hashes::PedersenCHasher;
-use openzeppelin::token::erc20::extensions::erc4626::interface::{
-    IERC4626Dispatcher, IERC4626DispatcherTrait,
-};
-use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use snforge_std::{CheatSpan, ContractClassTrait, DeclareResultTrait, cheat_caller_address, declare};
 use starknet::syscalls::call_contract_syscall;
-use starknet::{ClassHash, ContractAddress, SyscallResultTrait};
+use starknet::{ClassHash, ContractAddress};
 use vault_allocator::integration_interfaces::vesu::{
     IDefaultExtensionPOV2Dispatcher, IDefaultExtensionPOV2DispatcherTrait, ISingletonV2Dispatcher,
     ISingletonV2DispatcherTrait,

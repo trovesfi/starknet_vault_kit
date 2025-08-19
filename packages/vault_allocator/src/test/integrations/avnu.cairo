@@ -4,7 +4,7 @@
 
 use alexandria_math::i257::I257Impl;
 use core::num::traits::Zero;
-use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use snforge_std::{map_entry_address, store};
 use starknet::ContractAddress;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;

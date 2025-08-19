@@ -21,16 +21,20 @@
 pub mod Vault {
     use core::num::traits::Zero;
     use openzeppelin::access::accesscontrol::AccessControlComponent;
+    use openzeppelin::interfaces::erc20::{
+        ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
+    };
+    use openzeppelin::interfaces::erc721::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
+    use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::security::pausable::PausableComponent;
-    use openzeppelin::token::erc20::interface::{
-        ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
+    use openzeppelin::token::erc20::extensions::erc4626::ERC4626Component::Fee;
+    use openzeppelin::token::erc20::extensions::erc4626::{
+        DefaultConfig, ERC4626Component, ERC4626DefaultNoFees, ERC4626DefaultNoLimits,
     };
     use openzeppelin::token::erc20::{
         DefaultConfig as ERC20DefaultConfig, ERC20Component, ERC20HooksEmptyImpl,
     };
-    use openzeppelin::token::erc721::interface::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
-    use openzeppelin::upgrades::interface::IUpgradeable;
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use openzeppelin::utils::math;
     use openzeppelin::utils::math::Rounding;
@@ -39,9 +43,6 @@ pub mod Vault {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
-    use vault::oz_4626::{
-        DefaultConfig, ERC4626Component, ERC4626DefaultLimits, ERC4626DefaultNoFees,
-    };
     use vault::redeem_request::interface::{
         IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait, RedeemRequestInfo,
     };
@@ -308,30 +309,55 @@ pub mod Vault {
         /// Hook executed before burning shares and transferring assets during withdrawal
         /// Direct withdrawals are not supported - users must use epoched redemption system
         fn before_withdraw(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            owner: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {
             Errors::not_implemented(); // Withdrawals disabled - use request_redeem instead
         }
 
+
         /// Hook executed after burning shares and transferring assets during withdrawal
         /// No additional logic needed since withdrawals are disabled
         fn after_withdraw(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            owner: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {}
+
 
         /// Hook executed before transferring assets and minting shares during deposit
         /// Ensures vault is not paused before accepting deposits
         fn before_deposit(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {
             let mut contract_state = self.get_contract_mut();
             contract_state.pausable.assert_not_paused(); // Prevent deposits when paused
         }
 
+
         /// Hook executed after transferring assets and minting shares during deposit
         /// Updates buffer to track assets available for immediate use
         fn after_deposit(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {
             let mut contract_state = self.get_contract_mut();
             contract_state.buffer.write(contract_state.buffer.read() + assets);

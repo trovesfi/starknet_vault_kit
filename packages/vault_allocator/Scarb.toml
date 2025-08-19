@@ -46,7 +46,6 @@ block_id.number = "1794270"
 starknet.workspace = true
 openzeppelin.workspace = true
 alexandria_math.workspace = true
-pragma_lib.workspace = true
 
 
 [dev-dependencies]

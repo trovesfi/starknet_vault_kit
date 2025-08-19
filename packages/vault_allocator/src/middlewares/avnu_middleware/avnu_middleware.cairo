@@ -4,9 +4,8 @@
 
 #[starknet::contract]
 pub mod AvnuMiddleware {
-    use alexandria_math::ed25519::c;
     use openzeppelin::access::ownable::OwnableComponent;
-    use openzeppelin::token::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+    use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address, get_contract_address};
     use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;

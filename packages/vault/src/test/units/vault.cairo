@@ -3,19 +3,17 @@
 // Licensed under the MIT License. See LICENSE file for details.
 
 use core::num::traits::Zero;
-use openzeppelin::access::accesscontrol::interface::{
+use openzeppelin::interfaces::accesscontrol::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
-use openzeppelin::security::interface::{IPausableDispatcher, IPausableDispatcherTrait};
-use openzeppelin::token::erc20::extensions::erc4626::interface::{
-    IERC4626Dispatcher, IERC4626DispatcherTrait,
-};
-use openzeppelin::token::erc20::interface::{
+use openzeppelin::interfaces::erc20::{
     ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20MetadataDispatcher,
     IERC20MetadataDispatcherTrait,
 };
-use openzeppelin::token::erc721::interface::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
-use openzeppelin::upgrades::interface::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
+use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
+use openzeppelin::interfaces::erc721::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
+use openzeppelin::interfaces::security::pausable::{IPausableDispatcher, IPausableDispatcherTrait};
+use openzeppelin::interfaces::upgrades::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
 use openzeppelin::utils::math;
 use openzeppelin::utils::math::Rounding;
 use snforge_std::{
@@ -26,9 +24,9 @@ use starknet::{ContractAddress, get_block_timestamp};
 use vault::redeem_request::interface::{IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait};
 use vault::test::utils::{
     DUMMY_ADDRESS, FEES_RECIPIENT, MANAGEMENT_FEES, MAX_DELTA, ORACLE, OTHER_DUMMY_ADDRESS, OWNER,
-    PAUSER, PERFORMANCE_FEES, REDEEM_FEES, REPORT_DELAY, USER1, USER2, VAULT_ALLOCATOR, VAULT_NAME,
-    VAULT_SYMBOL, between, cheat_caller_address_once, deploy_counter, deploy_erc20_mock,
-    deploy_redeem_request, deploy_vault,
+    PERFORMANCE_FEES, REDEEM_FEES, REPORT_DELAY, VAULT_ALLOCATOR, VAULT_NAME, VAULT_SYMBOL, between,
+    cheat_caller_address_once, deploy_counter, deploy_erc20_mock, deploy_redeem_request,
+    deploy_vault,
 };
 use vault::vault::interface::{IVaultDispatcher, IVaultDispatcherTrait};
 use vault::vault::vault::Vault;
@@ -1418,7 +1416,7 @@ fn test_report_when_vault_allocator_is_not_set() {
 
     let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
-    let shares = erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
+    erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
 
     let mut cheat_calldata_vault_allocator = ArrayTrait::new();
     cheat_calldata_vault_allocator.append(0);
@@ -1454,7 +1452,7 @@ fn test_report_when_fees_recipient_is_not_set() {
 
     let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
-    let shares = erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
+    erc4626_dispatcher.deposit(Vault::WAD, DUMMY_ADDRESS());
 
     let mut cheat_calldata_fees_recipient = ArrayTrait::new();
     cheat_calldata_fees_recipient.append(0);

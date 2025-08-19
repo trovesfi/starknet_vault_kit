@@ -5,8 +5,8 @@
 #[starknet::contract]
 pub mod Erc4626Mock {
     use openzeppelin::token::erc20::extensions::erc4626::{
-        DefaultConfig, ERC4626Component, ERC4626DefaultLimits, ERC4626DefaultNoFees,
-        ERC4626HooksEmptyImpl,
+        DefaultConfig, ERC4626Component, ERC4626DefaultNoFees, ERC4626DefaultNoLimits,
+        ERC4626EmptyHooks, ERC4626SelfAssetsManagement,
     };
     use openzeppelin::token::erc20::{
         DefaultConfig as ERC20DefaultConfig, ERC20Component, ERC20HooksEmptyImpl,

@@ -3,21 +3,14 @@
 // Licensed under the MIT License. See LICENSE file for details.
 use alexandria_math::i257::{I257Impl, I257Trait};
 use core::num::traits::Zero;
-use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use snforge_std::{map_entry_address, store};
 use starknet::ContractAddress;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::{
-    Amount, AmountDenomination, AmountType, Route, UnsignedAmount,
-};
-use vault_allocator::integration_interfaces::vesu::{
-    IDefaultExtensionPOV2Dispatcher, IDefaultExtensionPOV2DispatcherTrait, ISingletonV2Dispatcher,
-    ISingletonV2DispatcherTrait,
+    Amount, AmountDenomination, AmountType, Route,
 };
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
-use vault_allocator::middlewares::avnu_middleware::interface::{
-    IAvnuMiddlewareDispatcher, IAvnuMiddlewareDispatcherTrait,
-};
-use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, USDC, USDT, VESU_SINGLETON, wstETH};
+use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, VESU_SINGLETON, wstETH};
 use vault_allocator::test::utils::{
     ManageLeaf, OWNER, STRATEGIST, WAD, _add_avnu_leafs, _add_vesu_flash_loan_leafs,
     _add_vesu_leafs, _get_proofs_using_tree, _pad_leafs_to_power_of_two, cheat_caller_address_once,
@@ -238,7 +231,6 @@ fn test_leveraged_loop_staked_ether() {
         );
 
     routes.serialize(ref array_of_calldata_multi_route_swap);
-    println!("array_of_calldata_multi_route_swap: {:?}", array_of_calldata_multi_route_swap);
 
     flash_loan_data_calldata.append(array_of_calldata_multi_route_swap.span());
 

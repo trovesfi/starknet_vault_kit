@@ -5,9 +5,9 @@
 #[starknet::contract]
 pub mod Erc20Mock {
     use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::token::erc20::{DefaultConfig, ERC20Component, ERC20HooksEmptyImpl};
     use openzeppelin::upgrades::UpgradeableComponent;
-    use openzeppelin::upgrades::interface::IUpgradeable;
     use starknet::{ClassHash, ContractAddress};
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);

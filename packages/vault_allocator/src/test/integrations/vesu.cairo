@@ -4,10 +4,8 @@
 
 use alexandria_math::i257::{I257Impl, I257Trait};
 use core::num::traits::Zero;
-use openzeppelin::token::erc20::extensions::erc4626::interface::{
-    IERC4626Dispatcher, IERC4626DispatcherTrait,
-};
-use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
 use snforge_std::{map_entry_address, store};
 use starknet::ContractAddress;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::{
@@ -20,8 +18,8 @@ use vault_allocator::integration_interfaces::vesu::{
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
 use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, VESU_SINGLETON, wstETH};
 use vault_allocator::test::utils::{
-    ManageLeaf, OWNER, STRATEGIST, WAD, _add_vesu_flash_loan_leafs, _add_vesu_leafs,
-    _get_proofs_using_tree, _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_manager,
+    ManageLeaf, OWNER, STRATEGIST, WAD, _add_vesu_leafs, _get_proofs_using_tree,
+    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_manager,
     deploy_simple_decoder_and_sanitizer, deploy_vault_allocator, generate_merkle_tree,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
