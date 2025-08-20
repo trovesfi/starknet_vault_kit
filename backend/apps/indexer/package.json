@@ -1,0 +1,27 @@
+{
+  "name": "indexer",
+  "version": "0.0.1",
+  "description": "Apibara indexer for StarkNet Vault Kit events",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/main.ts",
+    "start": "node dist/main.js",
+    "lint": "eslint \"src/**/*.ts\" --fix"
+  },
+  "dependencies": {
+    "@forge/config": "workspace:*",
+    "@forge/db": "workspace:*",
+    "@forge/core": "workspace:*",
+    "@forge/logger": "workspace:*",
+    "@apibara/protocol": "^0.4.9",
+    "@apibara/starknet": "^0.5.0",
+    "starknet": "^6.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.1",
+    "@types/node": "^20.3.1"
+  }
+}

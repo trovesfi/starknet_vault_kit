@@ -1,0 +1,15 @@
+{
+  "name": "@forge/db",
+  "version": "0.0.1",
+  "description": "Database client and DAL for StarkNet Vault Kit",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@nestjs/common": "^10.0.0",
+    "@prisma/client": "^5.0.0"
+  }
+}
