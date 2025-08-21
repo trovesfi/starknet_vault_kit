@@ -136,7 +136,7 @@ pub mod Manager {
                 ),
             >::deserialize(ref data)
                 .unwrap();
-
+            
             let this = get_contract_address();
             IManagerDispatcher { contract_address: this }
                 .manage_vault_with_merkle_verification(
