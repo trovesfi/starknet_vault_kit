@@ -8,9 +8,7 @@ pub mod Erc4626DecoderAndSanitizerComponent {
     use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::interface::IERC4626DecoderAndSanitizer;
 
     #[storage]
-    pub struct Storage {
-        pub vault_allocator: ContractAddress,
-    }
+    pub struct Storage {}
 
     #[event]
     #[derive(Drop, Debug, PartialEq, starknet::Event)]

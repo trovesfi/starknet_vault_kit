@@ -140,7 +140,6 @@ pub trait ISingletonV2<
     // fn modify_position(
     //     ref self: TContractState, params: ModifyPositionParams,
     // ) -> UpdatePositionResponse;
-    // fn transfer_position(ref self: TContractState, params: TransferPositionParams);
     // fn liquidate_position(
     //     ref self: TContractState, params: LiquidatePositionParams,
     // ) -> UpdatePositionResponse;

@@ -3,13 +3,11 @@
 // Licensed under the MIT License. See LICENSE file for details.
 
 use alexandria_math::i257::{I257Impl, I257Trait};
-use core::num::traits::Zero;
 use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
 use snforge_std::{map_entry_address, store};
-use starknet::ContractAddress;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::{
-    Amount, AmountDenomination, AmountType, UnsignedAmount,
+    Amount, AmountDenomination, AmountType,
 };
 use vault_allocator::integration_interfaces::vesu::{
     IDefaultExtensionPOV2Dispatcher, IDefaultExtensionPOV2DispatcherTrait, ISingletonV2Dispatcher,
@@ -328,93 +326,26 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
         .extension(GENESIS_POOL_ID);
     let v_token = IDefaultExtensionPOV2Dispatcher { contract_address: extension }
         .v_token_for_collateral_asset(GENESIS_POOL_ID, wstETH());
-    let v_token_erc4626_disp = IERC4626Dispatcher { contract_address: v_token };
-    let expected_shares_obtained = v_token_erc4626_disp.preview_deposit(deposit_amount);
-    let debt_amount: u256 = WAD / 4; // 25% of the deposit
+    let debt_amount: u256 = WAD / 40; // 2.5% of the deposit
 
     let mut array_of_decoders_and_sanitizers = ArrayTrait::new();
-    array_of_decoders_and_sanitizers.append(simple_decoder_and_sanitizer);
-    array_of_decoders_and_sanitizers.append(simple_decoder_and_sanitizer);
-    array_of_decoders_and_sanitizers.append(simple_decoder_and_sanitizer);
     array_of_decoders_and_sanitizers.append(simple_decoder_and_sanitizer);
     array_of_decoders_and_sanitizers.append(simple_decoder_and_sanitizer);
 
     let mut array_of_targets = ArrayTrait::new();
     array_of_targets.append(wstETH());
-    array_of_targets.append(v_token);
-    array_of_targets.append(v_token);
-    array_of_targets.append(VESU_SINGLETON());
     array_of_targets.append(VESU_SINGLETON());
 
     let mut array_of_selectors = ArrayTrait::new();
     array_of_selectors.append(selector!("approve"));
-    array_of_selectors.append(selector!("deposit"));
-    array_of_selectors.append(selector!("approve"));
-    array_of_selectors.append(selector!("transfer_position"));
     array_of_selectors.append(selector!("modify_position"));
 
     let mut array_of_calldatas = ArrayTrait::new();
-    let mut array_of_calldata_approve: Array<felt252> = ArrayTrait::new();
-    v_token.serialize(ref array_of_calldata_approve);
-    deposit_amount.serialize(ref array_of_calldata_approve);
-    array_of_calldatas.append(array_of_calldata_approve.span());
 
-    let mut array_of_calldata_deposit: Array<felt252> = ArrayTrait::new();
-    deposit_amount.serialize(ref array_of_calldata_deposit);
-    vault_allocator.contract_address.serialize(ref array_of_calldata_deposit);
-    array_of_calldatas.append(array_of_calldata_deposit.span());
-
-    let mut array_of_calldata_approve_vtoken: Array<felt252> = ArrayTrait::new();
-    extension.serialize(ref array_of_calldata_approve_vtoken);
-    expected_shares_obtained.serialize(ref array_of_calldata_approve_vtoken);
-    array_of_calldatas.append(array_of_calldata_approve_vtoken.span());
-
-    let mut array_of_calldata_transfer_position: Array<felt252> = ArrayTrait::new();
-    // pool_id
-    GENESIS_POOL_ID.serialize(ref array_of_calldata_transfer_position);
-
-    // from_collateral_asset
-    wstETH().serialize(ref array_of_calldata_transfer_position);
-
-    // from_debt_asset
-    let from_debt_asset: ContractAddress = Zero::zero();
-    from_debt_asset.serialize(ref array_of_calldata_transfer_position);
-
-    // to_collateral_asset
-    wstETH().serialize(ref array_of_calldata_transfer_position);
-
-    // to_debt_asset
-    ETH().serialize(ref array_of_calldata_transfer_position);
-
-    // from_user
-    extension.serialize(ref array_of_calldata_transfer_position);
-
-    // to_user
-    vault_allocator.contract_address.serialize(ref array_of_calldata_transfer_position);
-
-    // collateral
-    let collateral: UnsignedAmount = UnsignedAmount {
-        amount_type: AmountType::Delta,
-        denomination: AmountDenomination::Native,
-        value: expected_shares_obtained,
-    };
-    collateral.serialize(ref array_of_calldata_transfer_position);
-
-    // debt
-    let debt: UnsignedAmount = UnsignedAmount {
-        amount_type: AmountType::Delta, denomination: AmountDenomination::Native, value: 0,
-    };
-    debt.serialize(ref array_of_calldata_transfer_position);
-
-    // from_data
-    let from_data: Span<felt252> = array![].span();
-    from_data.serialize(ref array_of_calldata_transfer_position);
-
-    // to_data
-    let to_data: Span<felt252> = array![].span();
-    to_data.serialize(ref array_of_calldata_transfer_position);
-
-    array_of_calldatas.append(array_of_calldata_transfer_position.span());
+    let mut array_of_calldata_approve_token: Array<felt252> = ArrayTrait::new();
+    VESU_SINGLETON().serialize(ref array_of_calldata_approve_token);
+    deposit_amount.serialize(ref array_of_calldata_approve_token);
+    array_of_calldatas.append(array_of_calldata_approve_token.span());
 
     let mut array_of_calldata_modify_position: Array<felt252> = ArrayTrait::new();
     // pool_id
@@ -430,10 +361,10 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     vault_allocator.contract_address.serialize(ref array_of_calldata_modify_position);
 
     // collateral
-    let value_for_collateral_modify_position = I257Trait::new(0, false);
+    let value_for_collateral_modify_position = I257Trait::new((deposit_amount), false);
     let collateral_modify_position: Amount = Amount {
         amount_type: AmountType::Delta,
-        denomination: AmountDenomination::Native,
+        denomination: AmountDenomination::Assets,
         value: value_for_collateral_modify_position,
     };
     collateral_modify_position.serialize(ref array_of_calldata_modify_position);
@@ -454,11 +385,8 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     array_of_calldatas.append(array_of_calldata_modify_position.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(leafs.at(0).clone());
-    manage_leafs.append(leafs.at(1).clone());
+    manage_leafs.append(leafs.at(5).clone());
     manage_leafs.append(leafs.at(6).clone());
-    manage_leafs.append(leafs.at(7).clone());
-    manage_leafs.append(leafs.at(8).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
     cheat_caller_address_once(manager.contract_address, STRATEGIST());
@@ -470,15 +398,11 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
             array_of_selectors.span(),
             array_of_calldatas.span(),
         );
-
     let new_underlying_balance = underlying_disp.balance_of(vault_allocator.contract_address);
     assert(new_underlying_balance == initial_wsteth_balance - deposit_amount, 'incorrect');
-
-    let v_token_erc20_disp = ERC20ABIDispatcher { contract_address: v_token };
-    let vault_shares_balance = v_token_erc20_disp.balance_of(vault_allocator.contract_address);
-    assert(vault_shares_balance == 0, 'incorrect');
 
     let debt_asset_disp = ERC20ABIDispatcher { contract_address: ETH() };
     let debt_asset_balance = debt_asset_disp.balance_of(vault_allocator.contract_address);
     assert(debt_asset_balance == debt_amount, 'incorrect');
 }
+

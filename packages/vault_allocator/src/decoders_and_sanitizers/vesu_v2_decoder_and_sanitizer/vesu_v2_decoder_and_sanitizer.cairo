@@ -3,11 +3,11 @@
 // Licensed under the MIT License. See LICENSE file for details.
 
 #[starknet::component]
-pub mod VesuDecoderAndSanitizerComponent {
-    use vault_allocator::decoders_and_sanitizers::decoder_custom_types::ModifyPositionParams;
+pub mod VesuV2DecoderAndSanitizerComponent {
+    use vault_allocator::decoders_and_sanitizers::decoder_custom_types::ModifyPositionParamsV2;
     use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::erc4626_decoder_and_sanitizer::Erc4626DecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::erc4626_decoder_and_sanitizer::Erc4626DecoderAndSanitizerComponent::Erc4626DecoderAndSanitizerImpl;
-    use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::interface::IVesuDecoderAndSanitizer;
+    use vault_allocator::decoders_and_sanitizers::vesu_v2_decoder_and_sanitizer::interface::IVesuV2DecoderAndSanitizer;
 
     #[storage]
     pub struct Storage {}
@@ -21,12 +21,11 @@ pub mod VesuDecoderAndSanitizerComponent {
         TContractState,
         +HasComponent<TContractState>,
         +Erc4626DecoderAndSanitizerComponent::HasComponent<TContractState>,
-    > of IVesuDecoderAndSanitizer<ComponentState<TContractState>> {
+    > of IVesuV2DecoderAndSanitizer<ComponentState<TContractState>> {
         fn modify_position(
-            self: @ComponentState<TContractState>, params: ModifyPositionParams,
+            self: @ComponentState<TContractState>, params: ModifyPositionParamsV2,
         ) -> Span<felt252> {
             let mut serialized_struct: Array<felt252> = ArrayTrait::new();
-            params.pool_id.serialize(ref serialized_struct);
             params.collateral_asset.serialize(ref serialized_struct);
             params.debt_asset.serialize(ref serialized_struct);
             params.user.serialize(ref serialized_struct);

@@ -53,6 +53,16 @@ pub mod decoders_and_sanitizers {
         pub mod interface;
         pub mod vesu_decoder_and_sanitizer;
     }
+
+    pub mod vesu_v2_decoder_and_sanitizer {
+        pub mod interface;
+        pub mod vesu_v2_decoder_and_sanitizer;
+    }
+
+    pub mod multiply_decoder_and_sanitizer {
+        pub mod interface;
+        pub mod multiply_decoder_and_sanitizer;
+    }
 }
 
 pub mod mocks {
@@ -64,7 +74,7 @@ pub mod mocks {
 
 #[cfg(test)]
 pub mod test {
-    pub mod creator;
+    // pub mod creator;
     pub mod register;
     pub mod utils;
     pub mod units {
@@ -73,7 +83,7 @@ pub mod test {
     }
     pub mod integrations {
         pub mod avnu;
-        pub mod vesu;
+        pub mod vesu_v1;
     }
 
     pub mod scenarios {

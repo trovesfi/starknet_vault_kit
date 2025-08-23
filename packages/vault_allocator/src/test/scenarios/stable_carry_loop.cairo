@@ -226,11 +226,11 @@ fn test_stable_carry_loop() {
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
     manage_leafs.append(leafs.at(5).clone());
+    manage_leafs.append(leafs.at(6).clone());
+    manage_leafs.append(leafs.at(12).clone());
+    manage_leafs.append(leafs.at(13).clone());
+    manage_leafs.append(leafs.at(7).clone());
     manage_leafs.append(leafs.at(8).clone());
-    manage_leafs.append(leafs.at(14).clone());
-    manage_leafs.append(leafs.at(15).clone());
-    manage_leafs.append(leafs.at(9).clone());
-    manage_leafs.append(leafs.at(10).clone());
 
     cheat_caller_address_once(avnu_middleware, OWNER());
     IAvnuMiddlewareDispatcher { contract_address: avnu_middleware }

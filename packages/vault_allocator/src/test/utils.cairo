@@ -483,9 +483,6 @@ pub fn _add_vesu_leafs(
                     @pool_id, 16,
                 );
 
-                // can be performed via transfering the v-token with transfer_position
-                // or can be performed via modify_position directly
-
                 // APPROVAL of collateral asset to the singleton
                 leafs
                     .append(
@@ -507,86 +504,7 @@ pub fn _add_vesu_leafs(
                     );
                 leaf_index += 1;
 
-                // APPROVAL of v-token to the extension
-                leafs
-                    .append(
-                        ManageLeaf {
-                            decoder_and_sanitizer,
-                            target: v_token,
-                            selector: selector!("approve"),
-                            argument_addresses: array![pool_extension.contract_address.into()]
-                                .span(),
-                            description: "Approve"
-                                + " "
-                                + "extension_pid"
-                                + "_"
-                                + pool_id_str.clone()
-                                + " "
-                                + "to spend"
-                                + " "
-                                + get_symbol(v_token),
-                        },
-                    );
-                leaf_index += 1;
-
                 let debt_asset = *debt_assets.at(j);
-
-                // TRANSFER POSITION to create the pair collateral/debt
-                let mut argument_addresses_transfer_position = ArrayTrait::new();
-
-                // pool_id
-                pool_id.serialize(ref argument_addresses_transfer_position);
-
-                // from_collateral_asset
-                collateral_asset.serialize(ref argument_addresses_transfer_position);
-
-                // from_debt_asset
-                let from_debt_asset: ContractAddress = Zero::zero();
-                from_debt_asset.serialize(ref argument_addresses_transfer_position);
-
-                // to_collateral_asset
-                collateral_asset.serialize(ref argument_addresses_transfer_position);
-
-                // to_debt_asset
-                debt_asset.serialize(ref argument_addresses_transfer_position);
-
-                // from_user
-                pool_extension.contract_address.serialize(ref argument_addresses_transfer_position);
-
-                // to_user
-                vault.serialize(ref argument_addresses_transfer_position);
-
-                // from_data
-                let from_data: Span<felt252> = array![].span();
-                from_data.serialize(ref argument_addresses_transfer_position);
-
-                // to_data
-                let to_data: Span<felt252> = array![].span();
-                to_data.serialize(ref argument_addresses_transfer_position);
-
-                leafs
-                    .append(
-                        ManageLeaf {
-                            decoder_and_sanitizer,
-                            target: singleton.contract_address,
-                            selector: selector!("transfer_position"),
-                            argument_addresses: argument_addresses_transfer_position.span(),
-                            description: "Transfer position"
-                                + " "
-                                + "extension_pid"
-                                + "_"
-                                + pool_id_str.clone()
-                                + " "
-                                + "with collateral"
-                                + " "
-                                + get_symbol(collateral_asset)
-                                + " "
-                                + "and debt"
-                                + " "
-                                + get_symbol(debt_asset),
-                        },
-                    );
-                leaf_index += 1;
 
                 // MODIFY POSITION
                 let mut argument_addresses_modify_position = ArrayTrait::new();
@@ -602,10 +520,6 @@ pub fn _add_vesu_leafs(
 
                 // user
                 vault.serialize(ref argument_addresses_modify_position);
-
-                // data
-                let data: Span<felt252> = array![].span();
-                data.serialize(ref argument_addresses_modify_position);
 
                 leafs
                     .append(

@@ -236,9 +236,9 @@ fn test_leveraged_loop_staked_ether() {
 
     let mut flash_loan_manager_leafs: Array<ManageLeaf> = ArrayTrait::new();
     flash_loan_manager_leafs.append(leafs.at(6).clone());
+    flash_loan_manager_leafs.append(leafs.at(7).clone());
+    flash_loan_manager_leafs.append(leafs.at(8).clone());
     flash_loan_manager_leafs.append(leafs.at(9).clone());
-    flash_loan_manager_leafs.append(leafs.at(10).clone());
-    flash_loan_manager_leafs.append(leafs.at(11).clone());
 
     let mut flash_loan_proofs = _get_proofs_using_tree(flash_loan_manager_leafs, tree.clone());
 

@@ -9,9 +9,7 @@ pub mod AvnuExchangeDecoderAndSanitizerComponent {
     use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;
 
     #[storage]
-    pub struct Storage {
-        pub vault_allocator: ContractAddress,
-    }
+    pub struct Storage {}
 
     #[event]
     #[derive(Drop, Debug, PartialEq, starknet::Event)]
