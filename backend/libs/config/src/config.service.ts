@@ -1,10 +1,8 @@
 import { ConfigService as ConfigServiceSource } from "@nestjs/config";
-import { EnvironmentVariables } from "./env.validation";
+import { BaseEnvironmentVariables } from "./env.validation";
 
-export class ConfigService extends ConfigServiceSource<EnvironmentVariables> {
-  public get<T extends keyof EnvironmentVariables>(
-    key: T
-  ): EnvironmentVariables[T] {
-    return super.get(key, { infer: true }) as EnvironmentVariables[T];
+export class ConfigService extends ConfigServiceSource {
+  public get(key: string): string | number | undefined {
+    return super.get(key, { infer: true });
   }
 }

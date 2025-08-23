@@ -12,7 +12,6 @@
   "dependencies": {
     "@forge/config": "workspace:*",
     "@forge/db": "workspace:*",
-    "@forge/core": "workspace:*",
     "@forge/logger": "workspace:*",
     "@apibara/protocol": "^0.4.9",
     "@apibara/starknet": "^0.5.0",

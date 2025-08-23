@@ -239,6 +239,18 @@ pub mod Vault {
 
         // Initialize timestamp for fee calculations
         self.last_report_timestamp.write(get_block_timestamp());
+
+        self
+            .emit(
+                Report {
+                    new_epoch: 0,
+                    new_handled_epoch_len: 0,
+                    total_supply: 0,
+                    total_assets: 0,
+                    management_fee_shares: 0,
+                    performance_fee_shares: 0,
+                },
+            );
     }
 
     // --- Contract Upgradeability ---
@@ -846,6 +858,15 @@ pub mod Vault {
         /// Get maximum allowed AUM change per report (in WAD format)
         fn max_delta(self: @ContractState) -> u256 {
             self.max_delta.read()
+        }
+
+        fn due_assets_from_id(self: @ContractState, id: u256) -> u256 {
+            let redeem_request_info = self.redeem_request.read().id_to_info(id);
+            let redeem_request_nominal = redeem_request_info
+                .nominal; // Original asset amount requested
+            let redeem_assets = self.redeem_assets.read(redeem_request_info.epoch);
+            let redeem_nominal = self.redeem_nominal.read(redeem_request_info.epoch);
+            (redeem_request_nominal * redeem_assets) / redeem_nominal
         }
     }
 

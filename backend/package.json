@@ -12,18 +12,18 @@
   "scripts": {
     "dev:api": "pnpm --filter api dev",
     "dev:indexer": "pnpm --filter indexer dev",
-    "dev:relayer": "pnpm --filter relayer dev",
-    "dev:all": "concurrently \"pnpm dev:api\" \"pnpm dev:indexer\" \"pnpm dev:relayer\"",
+    "dev:all": "concurrently \"pnpm dev:api\" \"pnpm dev:indexer\"",
+    "start:api": "pnpm --filter api start",
+    "start:indexer": "pnpm --filter indexer start",
     "build": "pnpm --recursive --filter='!@forge/root' run build",
     "build:api": "pnpm --filter api build",
     "build:indexer": "pnpm --filter indexer build",
-    "build:relayer": "pnpm --filter relayer build",
     "lint": "pnpm --recursive --filter='!@forge/root' run lint",
     "test": "pnpm --recursive --filter='!@forge/root' run test",
-    "migrate:dev": "prisma migrate dev",
-    "migrate:deploy": "prisma migrate deploy",
-    "generate": "prisma generate",
-    "studio": "prisma studio"
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.0.0",

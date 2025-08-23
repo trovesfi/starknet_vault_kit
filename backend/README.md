@@ -1,141 +1,122 @@
-# StarkNet Vault Kit Backend
+# StarkNet Vault Kit Backend - OSS Version
 
-A monorepo containing the backend services for the StarkNet Vault Kit project.
+**This is a reference backend (read-only) for the StarkNet Vault Kit.**
 
-## Architecture
+It provides minimal functionality to index vault events and expose basic API endpoints. This OSS version does not include premium features like pricing, automated redeems, SLA monitoring, or advanced analytics.
 
-This project is organized as a monorepo with shared libraries and independent applications:
+**For production deployments with full features, see our premium services.**
 
-### Applications (`apps/`)
+## What's Included
 
-- **`api`** - NestJS HTTP API service
-- **`indexer`** - Apibara event indexer
-- **`relayer`** - Cron job worker for automated operations
+### Applications
 
-### Libraries (`libs/`)
+- **`api`** - Minimal HTTP API with 4 endpoints
+- **`indexer`** - Event indexer for vault reports and redeems
 
-- **`@forge/core`** - Core types, DTOs, and constants
-- **`@forge/config`** - Configuration management with validation
-- **`@forge/db`** - Prisma client and database access layer
+### Libraries
+
+- **`@forge/config`** - Configuration management
+- **`@forge/db`** - Prisma database client
 - **`@forge/logger`** - Logging utilities
 
-## Getting Started
+## API Endpoints (4 total)
+
+1. `GET /health` - Health check (`{ status: "ok" }`)
+2. `GET /pending-redeems/:address` - Pending redeems for an address (with limit/offset)
+3. `GET /reports/last` - Latest report from database
+4. `GET /redeems/:id` - Redeem details by ID
+
+## Events Indexed (3 total)
+
+The indexer only tracks these events:
+
+1. **Report** - Vault reports with epoch, supply, and assets
+2. **RedeemRequested** - User redeem requests
+3. **RedeemClaimed** - Completed redeem claims
+
+## Database Schema (3 models + status)
+
+- `Report`
+- `RedeemRequested`
+- `RedeemClaimed`
+- `IndexerStatus`
+
+## Quick Start with Docker
+
+1. **Clone and setup:**
+
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+2. **Run with Docker Compose:**
+
+```bash
+docker-compose up -d
+```
+
+This starts:
+
+- PostgreSQL database
+- Indexer service
+- API service on port 3000
+
+3. **Check health:**
+
+```bash
+curl http://localhost:3000/health
+```
+
+## Manual Setup
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (recommended) or yarn/npm with workspaces
-- PostgreSQL database
-- StarkNet RPC access
-- Apibara API token (for indexer)
+- pnpm
+- PostgreSQL
+- Apibara token (for indexing)
 
 ### Installation
 
 ```bash
-# Install all dependencies
+# Install dependencies
 pnpm install
 
-# Generate Prisma client
-pnpm generate
+# Setup database
+pnpm prisma:generate
+pnpm prisma:migrate:deploy
 
-# Run database migrations
-pnpm migrate:dev
-```
-
-### Development
-
-```bash
-# Run all services in development mode
-pnpm dev:all
-
-# Run individual services
-pnpm dev:api
-pnpm dev:indexer
-pnpm dev:relayer
-```
-
-### Building
-
-```bash
-# Build all packages
+# Build
 pnpm build
-
-# Build individual packages
-pnpm build:api
-pnpm build:indexer
-pnpm build:relayer
 ```
 
-### Database
+### Run Services
 
 ```bash
-# Generate Prisma client
-pnpm generate
+# Start API
+pnpm start:api
 
-# Run migrations
-pnpm migrate:dev
-
-# Open Prisma Studio
-pnpm studio
+# Start Indexer (separate terminal)
+pnpm start:indexer
 ```
 
-## Environment Variables
+## Configuration
 
-Create a `.env` file in the root with:
+Copy `.env.example` to `.env` and configure:
 
 ```bash
-DATABASE_URL="postgresql://user:password@localhost:5432/starknet_vault_kit"
-STARKNET_RPC_URL="https://starknet-sepolia.public.blastapi.io/rpc/v0_7"
-APIBARA_TOKEN="your_apibara_token"
-PORT=3000
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/starknet_vault_kit"
+RPC_URL="https://starknet-mainnet.public.blastapi.io"
+VAULT_ADDRESS="0x..." # Your vault contract address
+START_BLOCK=12993
+APIBARA_TOKEN="your_token_here"
 ```
 
-## Project Structure
+## License
 
-```
-.
-├── apps/
-│   ├── api/              # NestJS HTTP API
-│   ├── indexer/          # Apibara event indexer
-│   └── relayer/          # Cron job worker
-├── libs/
-│   ├── core/             # Shared types and constants
-│   ├── config/           # Configuration management
-│   ├── db/               # Database client and DAL
-│   └── logger/           # Logging utilities
-├── prisma/
-│   └── schema.prisma     # Database schema
-├── package.json          # Root package with workspace scripts
-├── pnpm-workspace.yaml   # pnpm workspace configuration
-└── tsconfig.base.json    # Base TypeScript configuration
-```
+This project is licensed for reference use only. For production deployments with full features and support, please contact us.
 
-## Scripts
+---
 
-- `pnpm dev:all` - Run all services in development
-- `pnpm build` - Build all packages
-- `pnpm lint` - Lint all packages
-- `pnpm test` - Run tests for all packages
-- `pnpm migrate:dev` - Run database migrations
-- `pnpm generate` - Generate Prisma client
-- `pnpm studio` - Open Prisma Studio
-
-## Services
-
-### API Service (`apps/api`)
-
-- RESTful API endpoints
-- Swagger documentation at `/api`
-- Health checks at `/` and `/health`
-
-### Indexer Service (`apps/indexer`)
-
-- Real-time StarkNet event streaming via Apibara
-- Automatic event decoding and database persistence
-- Vault-specific event tracking (RedeemRequested, RedeemClaimed, Report)
-
-### Relayer Service (`apps/relayer`)
-
-- Scheduled job execution with cron
-- Automated vault operations and maintenance
-- Cross-chain bridging (planned)
+_Built for the StarkNet ecosystem 🚀_

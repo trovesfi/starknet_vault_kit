@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 import { ConfigModule } from '@forge/config';
 import { PrismaModule } from '@forge/db';
 import { StarknetModule } from './starknet';
@@ -10,7 +9,6 @@ import { AppService } from './app.service';
 @Module({
   imports: [
     ConfigModule,
-    ScheduleModule.forRoot(),
     PrismaModule,
     StarknetModule,
     HealthModule,

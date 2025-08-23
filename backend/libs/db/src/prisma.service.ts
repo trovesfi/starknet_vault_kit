@@ -29,10 +29,49 @@ export class PrismaService
     return latest as Report | undefined;
   }
 
+  async fetchLastReports(limit: number, offset?: number): Promise<Report[]> {
+    const reports = await this.report.findMany({
+      orderBy: { blockNumber: "desc" },
+      take: limit,
+      ...(offset && { skip: offset }),
+    });
+    return reports as Report[];
+  }
+
   async fetchLastRedeemClaimed(): Promise<RedeemClaimed | undefined> {
     const latest = await this.redeemClaimed.findFirst({
       orderBy: { blockNumber: "desc" },
     });
     return latest as RedeemClaimed | undefined;
+  }
+
+
+  public async fetchPendingRedeemsForAddress(
+    receiver: string,
+    limit?: number,
+    offset?: number
+  ): Promise<RedeemRequested[]> {
+    // Get all claimed redeem IDs for this address
+    const claimedRedeemIds = await this.redeemClaimed.findMany({
+      where: { receiver },
+      select: { redeemId: true },
+    });
+    
+    const claimedIds = claimedRedeemIds.map(r => r.redeemId);
+    
+    // Find all requested redeems that are NOT in the claimed list
+    return this.redeemRequested.findMany({
+      where: {
+        receiver,
+        redeemId: {
+          notIn: claimedIds,
+        },
+      },
+      orderBy: {
+        redeemId: "desc",
+      },
+      ...(limit && { take: limit }),
+      ...(offset && { skip: offset }),
+    });
   }
 }

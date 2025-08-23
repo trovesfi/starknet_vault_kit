@@ -4,6 +4,7 @@
 
 // Standard library imports
 use starknet::ContractAddress;
+use vault::redeem_request::interface::RedeemRequestInfo;
 
 #[starknet::interface]
 pub trait IVault<TContractState> {
@@ -44,5 +45,6 @@ pub trait IVault<TContractState> {
     fn vault_allocator(self: @TContractState) -> ContractAddress;
     fn last_report_timestamp(self: @TContractState) -> u64;
     fn max_delta(self: @TContractState) -> u256;
+    fn due_assets_from_id(self: @TContractState, id: u256) -> u256;
 }
 

@@ -1,25 +1,54 @@
-import { Controller, Get } from "@nestjs/common";
-import { ApiTags, ApiResponse } from "@nestjs/swagger";
+import { Controller, Get, Param, Query } from "@nestjs/common";
+import { ApiTags, ApiResponse, ApiParam, ApiQuery } from "@nestjs/swagger";
 import { AppService } from "./app.service";
+import { PendingRedeem } from "./types/strategy";
 
-@ApiTags("health")
+@ApiTags("api")
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Get()
-  @ApiResponse({ status: 200, description: "Health check endpoint" })
-  getHello(): string {
-    return this.appService.getHello();
+  @ApiResponse({ status: 200, description: "API information and available endpoints" })
+  getApiInfo() {
+    return this.appService.getApiInfo();
   }
 
-  @Get("health")
-  @ApiResponse({ status: 200, description: "Application health status" })
-  getHealth() {
-    return {
-      status: "ok",
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    };
+  @Get("pending-redeems/:address")
+  @ApiParam({ name: "address", description: "User address" })
+  @ApiQuery({
+    name: "limit",
+    required: false,
+    description: "Number of pending redeems to return",
+    type: Number,
+  })
+  @ApiQuery({
+    name: "offset",
+    required: false,
+    description: "Number of pending redeems to skip",
+    type: Number,
+  })
+  @ApiResponse({ status: 200, description: "Pending redeems for the address" })
+  async getPendingRedeems(
+    @Param("address") address: string,
+    @Query("limit") limit?: string,
+    @Query("offset") offset?: string
+  ): Promise<PendingRedeem[]> {
+    const limitNumber = limit ? parseInt(limit, 10) : undefined;
+    const offsetNumber = offset ? parseInt(offset, 10) : undefined;
+    return this.appService.getPendingRedeems(address, limitNumber, offsetNumber);
+  }
+
+  @Get("reports/last")
+  @ApiResponse({ status: 200, description: "Latest report from database" })
+  async getLastReport() {
+    return this.appService.getLastReport();
+  }
+
+  @Get("redeems/:id")
+  @ApiParam({ name: "id", description: "Redeem ID" })
+  @ApiResponse({ status: 200, description: "Redeem details by ID" })
+  async getRedeemById(@Param("id") id: string) {
+    return this.appService.getRedeemById(id);
   }
 }

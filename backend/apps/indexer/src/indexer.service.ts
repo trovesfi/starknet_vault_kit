@@ -9,7 +9,7 @@ import { DataFinality } from "@apibara/protocol/dist/proto/apibara/node/v1alpha2
 import { hash as starknetHash, validateAndParseAddress } from "starknet";
 import { ConfigService } from "@forge/config";
 import { PrismaService } from "@forge/db";
-import { STRATEGY } from "@forge/core";
+import { Logger } from "@forge/logger";
 import {
   decodeReportEvent,
   decodeRedeemRequestedEvent,
@@ -46,6 +46,7 @@ export class IndexerService {
   private url: string;
   private apibaraToken: string;
   private vaultFe: v1alpha2.IFieldElement;
+  private logger: Logger;
 
   private redeemRequestedBuffer: any[] = [];
   private redeemClaimedBuffer: any[] = [];
@@ -55,8 +56,9 @@ export class IndexerService {
     private readonly configService: ConfigService,
     private readonly prismaService: PrismaService
   ) {
+    this.logger = Logger.create('IndexerService');
     this.url = "mainnet.starknet.a5a.ch";
-    this.apibaraToken = this.configService.get("APIBARA_TOKEN");
+    this.apibaraToken = this.configService.get("APIBARA_TOKEN") as string;
 
     const graceful = async () => {
       try {
@@ -78,7 +80,7 @@ export class IndexerService {
       url: this.url,
       token: this.apibaraToken,
       onReconnect: async (err, retryCount) => {
-        console.error(`[Indexer] Connection lost. Attempt #${retryCount}`, err);
+        this.logger.error('Connection lost', err, { retryCount, errorCode: err.code });
         if (err.code !== 13 && err.code !== 14) {
           // Code 13 = internal error, 14 = unavailable
           return { reconnect: false };
@@ -97,15 +99,13 @@ export class IndexerService {
 
     const filterBuilder = Filter.create().withHeader({ weak: false });
 
+    const vaultAddress = this.configService.get('VAULT_ADDRESS') as string;
     try {
       this.vaultFe = FieldElement.fromBigInt(
-        validateAndParseAddress(STRATEGY.vault)
+        validateAndParseAddress(vaultAddress)
       );
     } catch (e) {
-      console.error("Invalid STRATEGY.vault address", {
-        vault: STRATEGY.vault,
-        error: e,
-      });
+      this.logger.error('Invalid vault address', e, { vaultAddress });
       throw e;
     }
 
@@ -124,7 +124,7 @@ export class IndexerService {
       );
     });
 
-    let startBlock = STRATEGY.startBlockIndexing;
+    let startBlock = Number(this.configService.get('START_BLOCK'));
 
     const [lastRedeemRequested, lastRedeemClaimed, lastReport] =
       await Promise.all([
@@ -142,7 +142,12 @@ export class IndexerService {
 
     startBlock = maxBlock + 1;
 
-    console.log(`📦 Resuming from block: ${startBlock} (maxFetchedBlock + 1)`);
+    this.logger.info(`📦 Resuming from block: ${startBlock} (maxFetchedBlock + 1)`, {
+      startBlock,
+      lastRedeemRequestedBlock: lastRedeemRequested?.blockNumber || 0,
+      lastRedeemClaimedBlock: lastRedeemClaimed?.blockNumber || 0,
+      lastReportBlock: lastReport?.blockNumber || 0,
+    });
 
     const cursor = StarkNetCursor.createWithBlockNumber(startBlock);
 
@@ -168,9 +173,11 @@ export class IndexerService {
             throw new Error("No timestamp in block header");
           }
 
-          console.log(
-            `Processing block ${blockNum}, lastBlockIndexed: ${this.lastBlockIndexedVault}`
-          );
+          this.logger.debug('Processing block', {
+            blockNumber: blockNum,
+            lastBlockIndexed: this.lastBlockIndexedVault,
+            timestamp: Number(timestamp)
+          });
 
           for (let event of block.events) {
             const hash = event.transaction?.meta?.hash;
@@ -197,9 +204,12 @@ export class IndexerService {
               }
             });
 
-            console.log(
-              `Event: ${this.getEventTypeName(eventTypeHex)}, block: ${blockNum}, tx: ${hashHex}`
-            );
+            this.logger.debug('Processing event', {
+              eventType: this.getEventTypeName(eventTypeHex),
+              blockNumber: blockNum,
+              transactionHash: hashHex,
+              eventTypeHex
+            });
 
             try {
               await this.processEvent(eventTypeHex, hexData, {
@@ -210,10 +220,10 @@ export class IndexerService {
                 eventTypeHex,
               });
             } catch (error) {
-              console.error("Failed to process event:", {
-                block: blockNum,
-                tx: hashHex,
-                error,
+              this.logger.error('Failed to process event', error, {
+                blockNumber: blockNum,
+                transactionHash: hashHex,
+                eventType: this.getEventTypeName(eventTypeHex)
               });
               throw error;
             }
@@ -265,7 +275,7 @@ export class IndexerService {
         transactionHash
       );
     } else {
-      console.log("Unknown event type:", eventTypeHex);
+      this.logger.warn('Unknown event type', { eventTypeHex });
     }
   }
 
@@ -299,10 +309,9 @@ export class IndexerService {
         await this.flushRedeemRequestedBuffer();
       }
     } catch (error) {
-      console.error("Failed to process RedeemRequested event:", {
+      this.logger.error('Failed to process RedeemRequested event', error, {
         blockNumber,
-        transactionHash,
-        error,
+        transactionHash
       });
     }
   }
@@ -334,10 +343,9 @@ export class IndexerService {
         await this.flushRedeemClaimedBuffer();
       }
     } catch (error) {
-      console.error("Failed to process RedeemClaimed event:", {
+      this.logger.error('Failed to process RedeemClaimed event', error, {
         blockNumber,
-        transactionHash,
-        error,
+        transactionHash
       });
     }
   }
@@ -368,10 +376,9 @@ export class IndexerService {
         await this.flushReportBuffer();
       }
     } catch (error) {
-      console.error("Failed to process Report event:", {
+      this.logger.error('Failed to process Report event', error, {
         blockNumber,
-        transactionHash,
-        error,
+        transactionHash
       });
     }
   }
@@ -384,12 +391,12 @@ export class IndexerService {
         data: this.redeemRequestedBuffer,
         skipDuplicates: true,
       });
-      console.log(
-        `Flushed ${this.redeemRequestedBuffer.length} RedeemRequested events`
-      );
+      this.logger.info('Flushed RedeemRequested events', {
+        count: this.redeemRequestedBuffer.length
+      });
       this.redeemRequestedBuffer = [];
     } catch (err) {
-      console.error("Failed to flush RedeemRequested buffer:", err);
+      this.logger.error('Failed to flush RedeemRequested buffer', err);
       throw err;
     }
   }
@@ -402,12 +409,12 @@ export class IndexerService {
         data: this.redeemClaimedBuffer,
         skipDuplicates: true,
       });
-      console.log(
-        `Flushed ${this.redeemClaimedBuffer.length} RedeemClaimed events`
-      );
+      this.logger.info('Flushed RedeemClaimed events', {
+        count: this.redeemClaimedBuffer.length
+      });
       this.redeemClaimedBuffer = [];
     } catch (err) {
-      console.error("Failed to flush RedeemClaimed buffer:", err);
+      this.logger.error('Failed to flush RedeemClaimed buffer', err);
       throw err;
     }
   }
@@ -420,10 +427,12 @@ export class IndexerService {
         data: this.reportBuffer,
         skipDuplicates: true,
       });
-      console.log(`Flushed ${this.reportBuffer.length} Report events`);
+      this.logger.info('Flushed Report events', {
+        count: this.reportBuffer.length
+      });
       this.reportBuffer = [];
     } catch (err) {
-      console.error("Failed to flush Report buffer:", err);
+      this.logger.error('Failed to flush Report buffer', err);
       throw err;
     }
   }

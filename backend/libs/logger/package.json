@@ -8,5 +8,11 @@
     "build": "tsc",
     "dev": "tsc --watch"
   },
-  "dependencies": {}
+  "dependencies": {
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
 }
