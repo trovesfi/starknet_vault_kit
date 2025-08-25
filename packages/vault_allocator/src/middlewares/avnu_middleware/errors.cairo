@@ -10,4 +10,16 @@ pub mod Errors {
     pub fn slippage_exceeds_max(slippage: u256) {
         panic!("Slippage exceeds max: {}", slippage);
     }
+
+    pub fn rate_limit_exceeded(next: u64, allowed: u64) {
+        panic!("Rate limit exceeded: {} > {}", next, allowed);
+    }
+
+    pub fn period_zero() {
+        panic!("Period is zero");
+    }
+
+    pub fn allowed_calls_per_period_zero() {
+        panic!("Allowed calls per period is zero");
+    }
 }

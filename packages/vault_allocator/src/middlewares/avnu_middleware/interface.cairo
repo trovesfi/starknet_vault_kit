@@ -11,9 +11,11 @@ pub trait IAvnuMiddleware<T> {
     fn price_router(self: @T) -> ContractAddress;
     fn slippage_tolerance_bps(self: @T) -> u256;
 
+    fn set_config(ref self: T, period: u64, allowed_calls_per_period: u64);
+
 
     fn multi_route_swap(
-        self: @T,
+        ref self: T,
         sell_token_address: ContractAddress,
         sell_token_amount: u256,
         buy_token_address: ContractAddress,

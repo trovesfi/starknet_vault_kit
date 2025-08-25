@@ -39,24 +39,15 @@ pub struct UnsignedAmount {
     pub value: u256,
 }
 
-#[derive(PartialEq, Copy, Drop, Serde)]
-pub struct TransferPositionParams {
-    pub pool_id: felt252,
-    pub from_collateral_asset: ContractAddress,
-    pub from_debt_asset: ContractAddress,
-    pub to_collateral_asset: ContractAddress,
-    pub to_debt_asset: ContractAddress,
-    pub from_user: ContractAddress,
-    pub to_user: ContractAddress,
-    pub collateral: UnsignedAmount,
-    pub debt: UnsignedAmount,
-    pub from_data: Span<felt252>,
-    pub to_data: Span<felt252>,
-}
-
 #[derive(PartialEq, Copy, Drop, Serde, Default)]
 pub struct Amount {
     pub amount_type: AmountType,
+    pub denomination: AmountDenomination,
+    pub value: i257,
+}
+
+#[derive(PartialEq, Copy, Drop, Serde, Default)]
+pub struct AmountV2 {
     pub denomination: AmountDenomination,
     pub value: i257,
 }
@@ -77,9 +68,8 @@ pub struct ModifyPositionParamsV2 {
     pub collateral_asset: ContractAddress,
     pub debt_asset: ContractAddress,
     pub user: ContractAddress,
-    pub collateral: Amount,
-    pub debt: Amount,
-    pub data: Span<felt252>,
+    pub collateral: AmountV2,
+    pub debt: AmountV2,
 }
 
 
