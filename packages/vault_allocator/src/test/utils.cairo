@@ -16,6 +16,7 @@ use vault_allocator::integration_interfaces::vesu::{
 };
 use vault_allocator::manager::interface::IManagerDispatcher;
 use vault_allocator::mocks::counter::ICounterDispatcher;
+use vault_allocator::mocks::vault::MockVault::MockVaultTraitDispatcher;
 use vault_allocator::periphery::price_router::interface::{
     IPriceRouterDispatcher, IPriceRouterDispatcherTrait,
 };
@@ -99,6 +100,14 @@ pub fn deploy_erc20_mock() -> ContractAddress {
     OWNER().serialize(ref calldata);
     let (erc20_address, _) = erc20.deploy(@calldata).unwrap();
     erc20_address
+}
+
+pub fn deploy_mock_vault(underlying: ContractAddress) -> MockVaultTraitDispatcher {
+    let mock_vault = declare("MockVault").unwrap().contract_class();
+    let mut calldata = ArrayTrait::new();
+    underlying.serialize(ref calldata);
+    let (mock_vault_address, _) = mock_vault.deploy(@calldata).unwrap();
+    MockVaultTraitDispatcher { contract_address: mock_vault_address }
 }
 
 pub fn deploy_simple_decoder_and_sanitizer() -> ContractAddress {
@@ -241,24 +250,7 @@ fn _next_power_of_two(x: u256) -> u256 {
     }
     power
 }
-// pub fn _pad_leafs_to_power_of_two(ref leafs: Array<ManageLeaf>, ref leaf_index: u256) {
-//     let next_power = _next_power_of_two(leaf_index);
-//     let padding_needed = next_power - leaf_index;
 
-//     let default_leaf = ManageLeaf {
-//         decoder_and_sanitizer: Zero::zero(),
-//         target: Zero::zero(),
-//         selector: Zero::zero(),
-//         argument_addresses: ArrayTrait::new().span(),
-//     };
-
-//     let mut i = 0;
-//     while i < padding_needed {
-//         leafs.append(default_leaf);
-//         leaf_index += 1;
-//         i += 1;
-//     }
-// }
 
 pub fn _pad_leafs_to_power_of_two(ref leafs: Array<ManageLeaf>, ref leaf_index: u256) {
     let target_len = if leaf_index < 4_u256 {
@@ -332,6 +324,53 @@ pub fn _generate_proof(mut leaf: felt252, tree: Array<Array<felt252>>) -> Span<f
         }
     }
     proof.span()
+}
+
+
+// ========================================= VaultAllocator
+// =========================================
+
+pub fn _add_vault_allocator_leafs(
+    ref leafs: Array<ManageLeaf>,
+    ref leaf_index: u256,
+    vault_allocator: ContractAddress,
+    decoder_and_sanitizer: ContractAddress,
+    vault: IERC4626Dispatcher,
+) {
+    let underlying_asset = vault.asset();
+
+    // Approvals
+    leafs
+        .append(
+            ManageLeaf {
+                decoder_and_sanitizer,
+                target: underlying_asset,
+                selector: selector!("approve"),
+                argument_addresses: array![vault.contract_address.into()].span(),
+                description: "Approve"
+                    + " "
+                    + get_symbol(vault.contract_address)
+                    + " "
+                    + "to spend"
+                    + " "
+                    + get_symbol(underlying_asset),
+            },
+        );
+    leaf_index += 1;
+
+    // Bring liquidity
+
+    leafs
+        .append(
+            ManageLeaf {
+                decoder_and_sanitizer,
+                target: vault.contract_address,
+                selector: selector!("bring_liquidity"),
+                argument_addresses: array![].span(),
+                description: "Bring liquidity" + " " + get_symbol(vault.contract_address),
+            },
+        );
+    leaf_index += 1;
 }
 
 

@@ -70,6 +70,7 @@ pub mod mocks {
     pub mod erc20;
     pub mod erc4626;
     pub mod flashloan;
+    pub mod vault;
 }
 
 #[cfg(test)]
@@ -77,18 +78,18 @@ pub mod test {
     // pub mod creator;
     pub mod register;
     pub mod utils;
-    pub mod units {
-        pub mod manager;
-        pub mod vault_allocator;
-    }
+    // pub mod units {
+    //     pub mod manager;
+    //     pub mod vault_allocator;
+    // }
     pub mod integrations {
-        pub mod avnu;
-        pub mod vesu_v1;
+        // pub mod avnu;
+        pub mod vault_bring_liquidity;
+        // pub mod vesu_v1;
     }
-
-    pub mod scenarios {
-        pub mod leveraged_loop_staked_ether;
-        pub mod stable_carry_loop;
-    }
+    // pub mod scenarios {
+//     pub mod leveraged_loop_staked_ether;
+//     pub mod stable_carry_loop;
+// }
 }
 

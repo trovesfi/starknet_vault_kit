@@ -42,5 +42,10 @@ pub mod BaseDecoderAndSanitizerComponent {
             is_legacy.serialize(ref serialized_struct);
             serialized_struct.span()
         }
+
+        fn bring_liquidity(self: @ComponentState<TContractState>, amount: u256) -> Span<felt252> {
+            let mut serialized_struct: Array<felt252> = ArrayTrait::new();
+            serialized_struct.span()
+        }
     }
 }

@@ -15,4 +15,5 @@ pub trait IBaseDecoderAndSanitizer<T> {
         is_legacy: bool,
         data: Span<felt252>,
     ) -> Span<felt252>;
+    fn bring_liquidity(self: @T, amount: u256) -> Span<felt252>;
 }
