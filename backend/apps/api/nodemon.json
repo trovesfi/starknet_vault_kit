@@ -1,0 +1,8 @@
+{
+  "watch": ["src", "../../../libs"],
+  "ext": "ts,js,json",
+  "ignore": ["node_modules", "dist"],
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

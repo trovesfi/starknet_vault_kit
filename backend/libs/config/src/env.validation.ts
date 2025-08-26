@@ -1,5 +1,5 @@
 import { plainToClass, Transform } from "class-transformer";
-import { IsNumber, IsOptional, validateSync, IsString } from "class-validator";
+import { IsNumber, IsOptional, validateSync, IsString, IsBoolean } from "class-validator";
 
 // Base environment variables needed by all services
 export class BaseEnvironmentVariables {
@@ -16,12 +16,28 @@ export class ApiEnvironmentVariables extends BaseEnvironmentVariables {
 
   @IsString()
   RPC_URL: string;
+
+  @IsString()
+  VAULT_ADDRESS: string;
 }
 
 // Indexer-specific environment variables
 export class IndexerEnvironmentVariables extends BaseEnvironmentVariables {
   @IsString()
   APIBARA_TOKEN: string;
+
+  @IsString()
+  VAULT_ADDRESS: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Transform(({ value }) => Number(value))
+  START_BLOCK?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => value === 'true' || value === true)
+  FORCE_START_BLOCK?: boolean;
 }
 
 // Generic validation function

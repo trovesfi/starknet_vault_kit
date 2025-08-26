@@ -56,7 +56,7 @@ export class IndexerService {
     private readonly configService: ConfigService,
     private readonly prismaService: PrismaService
   ) {
-    this.logger = Logger.create('IndexerService');
+    this.logger = Logger.create("IndexerService");
     this.url = "mainnet.starknet.a5a.ch";
     this.apibaraToken = this.configService.get("APIBARA_TOKEN") as string;
 
@@ -80,7 +80,10 @@ export class IndexerService {
       url: this.url,
       token: this.apibaraToken,
       onReconnect: async (err, retryCount) => {
-        this.logger.error('Connection lost', err, { retryCount, errorCode: err.code });
+        this.logger.error("Connection lost", err, {
+          retryCount,
+          errorCode: err.code,
+        });
         if (err.code !== 13 && err.code !== 14) {
           // Code 13 = internal error, 14 = unavailable
           return { reconnect: false };
@@ -99,13 +102,13 @@ export class IndexerService {
 
     const filterBuilder = Filter.create().withHeader({ weak: false });
 
-    const vaultAddress = this.configService.get('VAULT_ADDRESS') as string;
+    const vaultAddress = this.configService.get("VAULT_ADDRESS") as string;
     try {
       this.vaultFe = FieldElement.fromBigInt(
         validateAndParseAddress(vaultAddress)
       );
     } catch (e) {
-      this.logger.error('Invalid vault address', e, { vaultAddress });
+      this.logger.error("Invalid vault address", e, { vaultAddress });
       throw e;
     }
 
@@ -124,30 +127,38 @@ export class IndexerService {
       );
     });
 
-    let startBlock = Number(this.configService.get('START_BLOCK'));
+    let startBlock = Number(this.configService.get("START_BLOCK")) || 0;
+    const forceStartBlock = this.configService.get("FORCE_START_BLOCK");
 
-    const [lastRedeemRequested, lastRedeemClaimed, lastReport] =
-      await Promise.all([
-        this.prismaService.fetchLastRedeemRequested(),
-        this.prismaService.fetchLastRedeemClaimed(),
-        this.prismaService.fetchLastReport(),
-      ]);
+    if (forceStartBlock == "true") {
+      this.logger.info(
+        `🔥 Force starting from block: ${startBlock} (FORCE_START_BLOCK=true, using START_BLOCK)`
+      );
+    } else {
+      const [lastRedeemRequested, lastRedeemClaimed, lastReport] =
+        await Promise.all([
+          this.prismaService.fetchLastRedeemRequested(),
+          this.prismaService.fetchLastRedeemClaimed(),
+          this.prismaService.fetchLastReport(),
+        ]);
 
-    const maxBlock = Math.max(
-      lastRedeemRequested?.blockNumber || 0,
-      lastRedeemClaimed?.blockNumber || 0,
-      lastReport?.blockNumber || 0,
-      startBlock
-    );
+      startBlock = Math.max(
+        lastRedeemRequested?.blockNumber || 0,
+        lastRedeemClaimed?.blockNumber || 0,
+        lastReport?.blockNumber || 0,
+        startBlock
+      );
 
-    startBlock = maxBlock + 1;
-
-    this.logger.info(`📦 Resuming from block: ${startBlock} (maxFetchedBlock + 1)`, {
-      startBlock,
-      lastRedeemRequestedBlock: lastRedeemRequested?.blockNumber || 0,
-      lastRedeemClaimedBlock: lastRedeemClaimed?.blockNumber || 0,
-      lastReportBlock: lastReport?.blockNumber || 0,
-    });
+      this.logger.info(
+        `📦 Resuming from block: ${startBlock} (maxFetchedBlock + 1)`,
+        {
+          startBlock,
+          lastRedeemRequestedBlock: lastRedeemRequested?.blockNumber || 0,
+          lastRedeemClaimedBlock: lastRedeemClaimed?.blockNumber || 0,
+          lastReportBlock: lastReport?.blockNumber || 0,
+        }
+      );
+    }
 
     const cursor = StarkNetCursor.createWithBlockNumber(startBlock);
 
@@ -173,14 +184,15 @@ export class IndexerService {
             throw new Error("No timestamp in block header");
           }
 
-          this.logger.debug('Processing block', {
+          this.logger.debug("Processing block", {
             blockNumber: blockNum,
             lastBlockIndexed: this.lastBlockIndexedVault,
-            timestamp: Number(timestamp)
+            timestamp: Number(timestamp),
           });
 
           for (let event of block.events) {
             const hash = event.transaction?.meta?.hash;
+
             if (!hash) {
               throw new Error("No hash");
             }
@@ -204,11 +216,11 @@ export class IndexerService {
               }
             });
 
-            this.logger.debug('Processing event', {
+            this.logger.debug("Processing event", {
               eventType: this.getEventTypeName(eventTypeHex),
               blockNumber: blockNum,
               transactionHash: hashHex,
-              eventTypeHex
+              eventTypeHex,
             });
 
             try {
@@ -220,10 +232,10 @@ export class IndexerService {
                 eventTypeHex,
               });
             } catch (error) {
-              this.logger.error('Failed to process event', error, {
+              this.logger.error("Failed to process event", error, {
                 blockNumber: blockNum,
                 transactionHash: hashHex,
-                eventType: this.getEventTypeName(eventTypeHex)
+                eventType: this.getEventTypeName(eventTypeHex),
               });
               throw error;
             }
@@ -275,7 +287,7 @@ export class IndexerService {
         transactionHash
       );
     } else {
-      this.logger.warn('Unknown event type', { eventTypeHex });
+      this.logger.warn("Unknown event type", { eventTypeHex });
     }
   }
 
@@ -309,9 +321,9 @@ export class IndexerService {
         await this.flushRedeemRequestedBuffer();
       }
     } catch (error) {
-      this.logger.error('Failed to process RedeemRequested event', error, {
+      this.logger.error("Failed to process RedeemRequested event", error, {
         blockNumber,
-        transactionHash
+        transactionHash,
       });
     }
   }
@@ -343,9 +355,9 @@ export class IndexerService {
         await this.flushRedeemClaimedBuffer();
       }
     } catch (error) {
-      this.logger.error('Failed to process RedeemClaimed event', error, {
+      this.logger.error("Failed to process RedeemClaimed event", error, {
         blockNumber,
-        transactionHash
+        transactionHash,
       });
     }
   }
@@ -376,9 +388,9 @@ export class IndexerService {
         await this.flushReportBuffer();
       }
     } catch (error) {
-      this.logger.error('Failed to process Report event', error, {
+      this.logger.error("Failed to process Report event", error, {
         blockNumber,
-        transactionHash
+        transactionHash,
       });
     }
   }
@@ -391,12 +403,12 @@ export class IndexerService {
         data: this.redeemRequestedBuffer,
         skipDuplicates: true,
       });
-      this.logger.info('Flushed RedeemRequested events', {
-        count: this.redeemRequestedBuffer.length
+      this.logger.info("Flushed RedeemRequested events", {
+        count: this.redeemRequestedBuffer.length,
       });
       this.redeemRequestedBuffer = [];
     } catch (err) {
-      this.logger.error('Failed to flush RedeemRequested buffer', err);
+      this.logger.error("Failed to flush RedeemRequested buffer", err);
       throw err;
     }
   }
@@ -409,12 +421,12 @@ export class IndexerService {
         data: this.redeemClaimedBuffer,
         skipDuplicates: true,
       });
-      this.logger.info('Flushed RedeemClaimed events', {
-        count: this.redeemClaimedBuffer.length
+      this.logger.info("Flushed RedeemClaimed events", {
+        count: this.redeemClaimedBuffer.length,
       });
       this.redeemClaimedBuffer = [];
     } catch (err) {
-      this.logger.error('Failed to flush RedeemClaimed buffer', err);
+      this.logger.error("Failed to flush RedeemClaimed buffer", err);
       throw err;
     }
   }
@@ -427,12 +439,12 @@ export class IndexerService {
         data: this.reportBuffer,
         skipDuplicates: true,
       });
-      this.logger.info('Flushed Report events', {
-        count: this.reportBuffer.length
+      this.logger.info("Flushed Report events", {
+        count: this.reportBuffer.length,
       });
       this.reportBuffer = [];
     } catch (err) {
-      this.logger.error('Failed to flush Report buffer', err);
+      this.logger.error("Failed to flush Report buffer", err);
       throw err;
     }
   }

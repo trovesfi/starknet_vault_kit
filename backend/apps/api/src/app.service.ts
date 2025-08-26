@@ -10,7 +10,7 @@ import { Logger } from "@forge/logger";
 @Injectable()
 export class AppService implements OnModuleInit {
   strategyDecimals: number;
-  private readonly logger = Logger.create('AppService');
+  private readonly logger = Logger.create("AppService");
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -20,18 +20,18 @@ export class AppService implements OnModuleInit {
 
   async onModuleInit() {
     try {
-      const vaultAddress = this.configService.get('VAULT_ADDRESS') as string;
-      this.logger.info('Initializing AppService', { vaultAddress });
-      
+      const vaultAddress = this.configService.get("VAULT_ADDRESS") as string;
+      this.logger.info("Initializing AppService", { vaultAddress });
+
       this.strategyDecimals = Number(
         await this.starknetService.vault_decimals(vaultAddress)
       );
-      
-      this.logger.info('AppService initialized successfully', {
-        strategyDecimals: this.strategyDecimals
+
+      this.logger.info("AppService initialized successfully", {
+        strategyDecimals: this.strategyDecimals,
       });
     } catch (error) {
-      this.logger.error('Failed to initialize AppService', error);
+      this.logger.error("Failed to initialize AppService", error);
       throw error;
     }
   }
@@ -58,10 +58,10 @@ export class AppService implements OnModuleInit {
   ): Promise<PendingRedeem[]> {
     try {
       const addressToUse = validateAndParseAddress(address);
-      this.logger.info('Fetching pending redeems', {
+      this.logger.info("Fetching pending redeems", {
         address: addressToUse,
         limit,
-        offset
+        offset,
       });
 
       // Fetch pending redeems directly from PrismaService
@@ -72,19 +72,22 @@ export class AppService implements OnModuleInit {
           offset
         );
 
-      this.logger.debug('Found pending redeems from database', {
-        count: pendingRedeemsForStrategy.length
+      this.logger.debug("Found pending redeems from database", {
+        count: pendingRedeemsForStrategy.length,
       });
 
       // Map database results to PendingRedeem type with parallel processing
       const pendingRedeemPromises = pendingRedeemsForStrategy.map(
         async (redeem) => {
           try {
-            const vaultAddress = this.configService.get('VAULT_ADDRESS') as string;
-            const dueAssets = await this.starknetService.vault_due_assets_from_id(
-              vaultAddress,
-              Number(redeem.redeemId)
-            );
+            const vaultAddress = this.configService.get(
+              "VAULT_ADDRESS"
+            ) as string;
+            const dueAssets =
+              await this.starknetService.vault_due_assets_from_id(
+                vaultAddress,
+                Number(redeem.redeemId)
+              );
 
             return {
               epoch: Number(redeem.epoch),
@@ -96,8 +99,8 @@ export class AppService implements OnModuleInit {
               transactionHash: redeem.transactionHash,
             };
           } catch (error) {
-            this.logger.error('Failed to process pending redeem', error, {
-              redeemId: redeem.redeemId.toString()
+            this.logger.error("Failed to process pending redeem", error, {
+              redeemId: redeem.redeemId.toString(),
             });
             throw error;
           }
@@ -105,29 +108,29 @@ export class AppService implements OnModuleInit {
       );
 
       const resolvedPendingRedeems = await Promise.all(pendingRedeemPromises);
-      
-      this.logger.info('Successfully processed pending redeems', {
+
+      this.logger.info("Successfully processed pending redeems", {
         address: addressToUse,
-        count: resolvedPendingRedeems.length
+        count: resolvedPendingRedeems.length,
       });
-      
+
       return resolvedPendingRedeems;
     } catch (error) {
-      this.logger.error('Failed to get pending redeems', error, { address });
+      this.logger.error("Failed to get pending redeems", error, { address });
       throw error;
     }
   }
 
   public async getLastReport() {
     try {
-      this.logger.debug('Fetching last report');
-      
+      this.logger.debug("Fetching last report");
+
       const lastReport = await this.prismaService.fetchLastReport();
       if (!lastReport) {
-        this.logger.info('No reports found in database');
+        this.logger.info("No reports found in database");
         return null;
       }
-      
+
       const result = {
         id: lastReport.id,
         blockNumber: lastReport.blockNumber,
@@ -137,55 +140,66 @@ export class AppService implements OnModuleInit {
         newHandledEpochLen: lastReport.newHandledEpochLen.toString(),
         totalSupply: this.formatBigIntToDecimal(lastReport.totalSupply),
         totalAssets: this.formatBigIntToDecimal(lastReport.totalAssets),
-        managementFeeShares: this.formatBigIntToDecimal(lastReport.managementFeeShares),
-        performanceFeeShares: this.formatBigIntToDecimal(lastReport.performanceFeeShares),
+        managementFeeShares: this.formatBigIntToDecimal(
+          lastReport.managementFeeShares
+        ),
+        performanceFeeShares: this.formatBigIntToDecimal(
+          lastReport.performanceFeeShares
+        ),
       };
-      
-      this.logger.info('Successfully fetched last report', {
+
+      this.logger.info("Successfully fetched last report", {
         reportId: result.id,
         blockNumber: result.blockNumber,
-        epoch: result.newEpoch
+        epoch: result.newEpoch,
       });
-      
+
       return result;
     } catch (error) {
-      this.logger.error('Failed to get last report', error);
+      this.logger.error("Failed to get last report", error);
       throw error;
     }
   }
 
   public async getRedeemById(redeemId: string) {
     try {
-      this.logger.info('Fetching redeem by ID', { redeemId });
-      
-      const redeemRequested = await this.prismaService.redeemRequested.findUnique({
-        where: { redeemId: BigInt(redeemId) }
-      });
-      
+      this.logger.info("Fetching redeem by ID", { redeemId });
+
+      const redeemRequested =
+        await this.prismaService.redeemRequested.findUnique({
+          where: { redeemId: BigInt(redeemId) },
+        });
+
       if (!redeemRequested) {
-        this.logger.info('Redeem request not found', { redeemId });
+        this.logger.info("Redeem request not found", { redeemId });
         return null;
       }
 
       const redeemClaimed = await this.prismaService.redeemClaimed.findUnique({
-        where: { redeemId: BigInt(redeemId) }
+        where: { redeemId: BigInt(redeemId) },
       });
 
       // Get current due assets from the contract (only if not claimed yet)
       let currentDueAssets: bigint | null = null;
       if (!redeemClaimed) {
         try {
-          const vaultAddress = this.configService.get('VAULT_ADDRESS') as string;
-          currentDueAssets = await this.starknetService.vault_due_assets_from_id(
-            vaultAddress,
-            Number(redeemId)
-          );
-          this.logger.debug('Fetched current due assets from contract', {
+          const vaultAddress = this.configService.get(
+            "VAULT_ADDRESS"
+          ) as string;
+          currentDueAssets =
+            await this.starknetService.vault_due_assets_from_id(
+              vaultAddress,
+              Number(redeemId)
+            );
+          this.logger.debug("Fetched current due assets from contract", {
             redeemId,
-            dueAssets: currentDueAssets?.toString()
+            dueAssets: currentDueAssets?.toString(),
           });
         } catch (error) {
-          this.logger.warn('Failed to fetch due assets for redeem ID', { redeemId, error: error.message });
+          this.logger.warn("Failed to fetch due assets for redeem ID", {
+            redeemId,
+            error: error.message,
+          });
         }
       }
 
@@ -196,23 +210,27 @@ export class AppService implements OnModuleInit {
         epoch: redeemRequested.epoch.toString(),
         sharesBurn: this.formatBigIntToDecimal(redeemRequested.shares),
         nominal: this.formatBigIntToDecimal(redeemRequested.assets),
-        assets: currentDueAssets ? this.formatBigIntToDecimal(currentDueAssets) : null,
+        assets: currentDueAssets
+          ? this.formatBigIntToDecimal(currentDueAssets)
+          : null,
         requestTimestamp: redeemRequested.timestamp,
         requestTransactionHash: redeemRequested.transactionHash,
         claimedTimestamp: redeemClaimed?.timestamp,
         claimedTransactionHash: redeemClaimed?.transactionHash,
-        claimedAssets: redeemClaimed ? this.formatBigIntToDecimal(redeemClaimed.assets) : null,
+        claimedAssets: redeemClaimed
+          ? this.formatBigIntToDecimal(redeemClaimed.assets)
+          : null,
       };
-      
-      this.logger.info('Successfully fetched redeem details', {
+
+      this.logger.info("Successfully fetched redeem details", {
         redeemId,
         isClaimed: !!redeemClaimed,
-        owner: result.owner
+        owner: result.owner,
       });
-      
+
       return result;
     } catch (error) {
-      this.logger.error('Failed to get redeem by ID', error, { redeemId });
+      this.logger.error("Failed to get redeem by ID", error, { redeemId });
       throw error;
     }
   }

@@ -20,7 +20,8 @@ services:
   indexer:
     build:
       context: .
-      dockerfile: Dockerfile.indexer
+      dockerfile: Dockerfile.dev
+      target: indexer
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/starknet_vault_kit
       - RPC_URL=${RPC_URL:-https://starknet-mainnet.public.blastapi.io}
@@ -28,6 +29,8 @@ services:
       - VAULT_ADDRESS=${VAULT_ADDRESS}
       - START_BLOCK=${START_BLOCK}
       - FORCE_START_BLOCK=${FORCE_START_BLOCK}
+    volumes:
+      - .:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,17 +40,20 @@ services:
         echo '✅ Starting migration and indexer...';
         npx prisma migrate deploy;
         echo '✅ Migration done! Starting Indexer...';
-        node dist/apps/indexer/main
+        pnpm run dev:indexer
       "
 
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile.dev
+      target: api
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/starknet_vault_kit
       - RPC_URL=${RPC_URL:-https://starknet-mainnet.public.blastapi.io}
       - VAULT_ADDRESS=${VAULT_ADDRESS}
+    volumes:
+      - .:/app
     ports:
       - "3000:3000"
     depends_on:
@@ -59,7 +65,7 @@ services:
         echo '✅ Starting migration and API...';
         npx prisma migrate deploy;
         echo '✅ Migration done! Starting API...';
-        node dist/apps/api/main
+        pnpm run dev:api
       "
 
 volumes:
