@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { ContractAddr, Deployer, FlashloanCallParams, getMainnetConfig, Global, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalStrategies, UniversalStrategy, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
+import { ContractAddr, Deployer, FlashloanCallParams, getMainnetConfig, Global, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalStrategies, UniversalStrategy, UniversalStrategySettings, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
 import { byteArray, CallData, Contract, hash, num, shortString, uint256 } from 'starknet';
 import * as CommonSettings from './config.json';
 import { StandardMerkleTree, LeafData } from './merkle';
@@ -25,17 +25,18 @@ const universalUSDCVault = new UniversalStrategy(config, pricer, UniversalStrate
 
 async function deployStrategy() {
     // prepare vault contract
+    // ! ensure correct names and token
     const vaultContract = [{
         contract_name: 'Vault',
         package_name: VAULT_PACKAGE,
         constructorData: getVaultConstructorCall({
-            name: 'Troves USDC Evergreen',
-            symbol: 'tUSDC-E',
-            underlying_asset: Global.getDefaultTokens().find(token => token.symbol === 'USDC')?.address!,
+            name: 'Troves WBTC Evergreen',
+            symbol: 'tWBTC-E',
+            underlying_asset: Global.getDefaultTokens().find(token => token.symbol === 'WBTC')?.address!,
             owner: OWNER,
             fees_recipient: FEE_RECIPIENT,
             ...CommonSettings.vault.default_settings,
-            max_delta: getMaxDelta(20, CommonSettings.vault.default_settings.report_delay)
+            max_delta: getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 6)
         })
     }];
 
@@ -127,13 +128,11 @@ function constructRoot(vaultContracts: VaultContracts) {
     }
 }
 
-async function setManagerRoot(vaultContracts: VaultContracts, caller: ContractAddr) {
+async function setManagerRoot(vaultStrategy: UniversalStrategy<UniversalStrategySettings>, caller: ContractAddr) {
     const provider = config.provider;
-    const managerCls = await provider.getClassAt(vaultContracts.manager.toString());
-    const managerContract = new Contract(managerCls.abi, vaultContracts.manager.toString(), provider as any);
-
-    const setRootCall = universalUSDCVault.getSetManagerCall(caller);
-    await Deployer.executeTransactions([setRootCall], acc, provider, 'Trigger manage');
+    const setRootCall = vaultStrategy.getSetManagerCall(caller);
+    const setRootCall2 = vaultStrategy.getSetManagerCall(vaultStrategy.metadata.additionalInfo.manager);
+    await Deployer.executeTransactions([setRootCall, setRootCall2], acc, provider, 'Trigger manage');
 }
 
 async function upgrade(
@@ -187,17 +186,44 @@ function getMaxDelta(expectedAPYPercent: number, report_delay_seconds: number, a
     return output / 100;
 }
 
+async function grantRole(vault: UniversalStrategy<UniversalStrategySettings>, role: string, account: string) {
+    const provider = config.provider;
+    const cls = await provider.getClassAt(vault.address.toString());
+    const contract = new Contract(cls.abi, vault.address.toString(), provider as any);
+    const grantRoleCall = contract.populate('grant_role', [role, account]);
+    await Deployer.executeTransactions([grantRoleCall], acc, provider, 'Grant role');
+}
 
+async function setMaxDelta(vault: UniversalStrategy<UniversalStrategySettings>, maxDelta: number) {
+    const provider = config.provider;
+    const cls = await provider.getClassAt(vault.address.toString());
+    const contract = new Contract(cls.abi, vault.address.toString(), provider as any);
+    const setMaxDeltaCall = contract.populate('set_max_delta', [uint256.bnToUint256(Math.round(maxDelta * 1e18))]);
+    await Deployer.executeTransactions([setMaxDeltaCall], acc, provider, 'Set max delta');
+}
+
+async function test() {
+    const addr = '0x043e4f09c32d13d43a880e85f69f7de93ceda62d6cf2581a582c6db635548fdc';
+    const provider = config.provider;
+    const cls = await provider.getClassAt(addr);
+    const contract = new Contract(cls.abi, addr, provider as any);
+
+    const result = await contract.call('')
+}
 if (require.main === module) {
     // deployStrategy();
+    const strategy = UniversalStrategies[1];
+    const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
     const vaultContracts = {
-        vault: ContractAddr.from('0x7e6498cf6a1bfc7e6fc89f1831865e2dacb9756def4ec4b031a9138788a3b5e'),
-        redeemRequest: ContractAddr.from('0x906d03590010868cbf7590ad47043959d7af8e782089a605d9b22567b64fda'),
-        vaultAllocator: ContractAddr.from('0x228cca1005d3f2b55cbaba27cb291dacf1b9a92d1d6b1638195fbd3d0c1e3ba'),
-        manager: ContractAddr.from('0xf41a2b1f498a7f9629db0b8519259e66e964260a23d20003f3e42bb1997a07')
+        vault: strategy.address,
+        redeemRequest: strategy.additionalInfo.manager,
+        vaultAllocator: strategy.additionalInfo.vaultAllocator,
+        manager: strategy.additionalInfo.manager
     }
-    // configureSettings();
+    // configureSettings(vaultContracts);
     // deploySanitizer();
-    // setManagerRoot(vaultContracts, vaultContracts.manager);
-    upgrade('Manager', VAULT_ALLOCATOR_PACKAGE, vaultContracts.manager.toString());
+    // setManagerRoot(vaultStrategy, ContractAddr.from('0x02D6cf6182259ee62A001EfC67e62C1fbc0dF109D2AA4163EB70D6d1074F0173'));
+    // upgrade('Manager', VAULT_ALLOCATOR_PACKAGE, vaultContracts.manager.toString());
+    grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), '0x2edf4edbed3f839e7f07dcd913e92299898ff4cf0ba532f8c572c66c5b331b2')
+    // setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
 }

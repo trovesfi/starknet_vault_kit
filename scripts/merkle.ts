@@ -58,15 +58,6 @@ export class StandardMerkleTree extends MerkleTreeImpl<LeafData> {
     return new StandardMerkleTree(tree, indexedValues, leafEncoding);
   }
 
-  static load(data: StandardMerkleTreeData<LeafData>): StandardMerkleTree {
-    validateArgument(data.format === 'standard-v1', `Unknown format '${data.format}'`);
-    validateArgument(data.leafEncoding !== undefined, 'Expected leaf encoding');
-
-    const tree = new StandardMerkleTree(data.tree, data.values, data.leafEncoding);
-    tree.validate();
-    return tree;
-  }
-
   static verify<T extends any[]>(root: BytesLike, leafEncoding: ValueType[], leaf: T, proof: BytesLike[]): boolean {
     // use default nodeHash (standardNodeHash) for processProof
     return toHex(root) === processProof(standardLeafHash(leafEncoding, leaf), proof);
