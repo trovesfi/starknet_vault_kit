@@ -11,8 +11,14 @@
   "license": "ISC",
   "dependencies": {
     "@ericnordelo/strk-merkle-tree": "^1.0.0",
-    "@strkfarm/sdk": "^1.0.56",
+    "@noble/curves": "^2.0.0",
+    "@strkfarm/sdk": "^1.0.60",
     "dotenv": "^17.2.1",
-    "starknet": "^7.6.4"
+    "starknet": "6.11.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "@strkfarm/sdk": "link:../../Library/pnpm/global/5/node_modules/@strkfarm/sdk"
+    }
   }
 }

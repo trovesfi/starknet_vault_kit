@@ -1,6 +1,6 @@
 // Configurable values
-const MAX_APY = 75;       // in %
-const MAX_SPEND_PER_DAY = 125; // in USD
+const MAX_APY = 100;       // in %
+const MAX_SPEND_PER_DAY = 160; // in USD
 const TVL_VALUES = [50000, 100000, 250000, 500000, 1000000];
 
 // Function to compute spend per day and APY

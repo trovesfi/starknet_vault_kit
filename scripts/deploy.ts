@@ -18,8 +18,8 @@ const OWNER = ContractAddr.from(acc.address);
 const FEE_RECIPIENT = ContractAddr.from(acc.address);
 const VAULT_PACKAGE = 'vault';
 const VAULT_ALLOCATOR_PACKAGE = 'vault_allocator';
-const SIMPLE_SANITIZER = ContractAddr.from('0x11b59e89b35dfceb3e48ec18c01f8ec569592026c275bcb58e22af9f4dedaac');
-
+const SIMPLE_SANITIZER = ContractAddr.from('0x3798dc4f83fdfad199e5236e3656cf2fb79bc50c00504d0dd41522e0f042072');
+const RELAYER = '0x02D6cf6182259ee62A001EfC67e62C1fbc0dF109D2AA4163EB70D6d1074F0173';
 const pricer = new PricerFromApi(config, Global.getDefaultTokens());
 const universalUSDCVault = new UniversalStrategy(config, pricer, UniversalStrategies[0]);
 
@@ -30,9 +30,10 @@ async function deployStrategy() {
         contract_name: 'Vault',
         package_name: VAULT_PACKAGE,
         constructorData: getVaultConstructorCall({
-            name: 'Troves WBTC Evergreen',
-            symbol: 'tWBTC-E',
-            underlying_asset: Global.getDefaultTokens().find(token => token.symbol === 'WBTC')?.address!,
+            // ! update all 3
+            name: 'Troves USDT Evergreen',
+            symbol: 'tUSDT-E',
+            underlying_asset: Global.getDefaultTokens().find(token => token.symbol === 'USDT')?.address!,
             owner: OWNER,
             fees_recipient: FEE_RECIPIENT,
             ...CommonSettings.vault.default_settings,
@@ -82,6 +83,8 @@ async function deployStrategy() {
     const managerDeploymentInfo = await Deployer.prepareMultiDeployContracts(managerContract, config, acc);
     console.log(managerDeploymentInfo);
 
+    const aumOracleCh = '0x00713f2c45a43e7427b161bcccd3797b88c4216bc055f5f1deab1debbb772b4d';
+
     // deploy now
     await Deployer.executeDeployCalls([
         ...vaultDeploymentInfo,
@@ -89,6 +92,13 @@ async function deployStrategy() {
         ...vaultAllocatorDeploymentInfo,
         ...managerDeploymentInfo
     ], acc, config.provider)
+
+    console.log("Deploying aum oracle")
+    await Deployer.deployContract('aum_oracle', aumOracleCh, {
+        admin_address: OWNER,
+        default_relayer_address: RELAYER,
+        vault_contract_address: vaultDeploymentInfo[0].address,
+    }, config, acc);
 }
 
 /**
@@ -102,23 +112,24 @@ async function configureSettings(vaultContracts: VaultContracts) {
     const vaultCls = await provider.getClassAt(vaultContracts.vault.toString());
     const vaultContract = new Contract(vaultCls.abi, vaultContracts.vault.toString(), provider as any);
 
-    const setRedeemContractCall = vaultContract.populate('register_redeem_request', [vaultContracts.redeemRequest.toString()])
-    const setVaultAllocatorCall = vaultContract.populate('register_vault_allocator', [vaultContracts.vaultAllocator.toString()])
+    const setRedeemContractCall = vaultContract.populate('register_redeem_request', [vaultContracts.redeemRequest.address.toString()])
+    const setVaultAllocatorCall = vaultContract.populate('register_vault_allocator', [vaultContracts.vaultAllocator.address.toString()])
 
     const vaultAllocatorCls = await provider.getClassAt(vaultContracts.vaultAllocator.toString());
     const vaultAllocatorContract = new Contract(vaultAllocatorCls.abi, vaultContracts.vaultAllocator.toString(), provider as any);
 
-    const setManagerCall = vaultAllocatorContract.populate('set_manager', [vaultContracts.manager.toString()]);
+    const setManagerCall = vaultAllocatorContract.populate('set_manager', [vaultContracts.manager.address.toString()]);
 
     await Deployer.executeTransactions([
         setRedeemContractCall,
-        setVaultAllocatorCall,
-        setManagerCall
+        // setVaultAllocatorCall,
+        // setManagerCall
     ], acc, provider, 'Setup vault configs')
 }
 
 async function deploySanitizer() {
-    await Deployer.deployContract('SimpleDecoderAndSanitizer', '0x6aecb2461dbda5f54ebd7de06bf741359504ece3d0d5282dc8afdcf30ff0d1f', [], config, acc);
+    // const ch = await Deployer.myDeclare('SimpleDecoderAndSanitizer', VAULT_ALLOCATOR_PACKAGE, config, acc);
+    await Deployer.deployContract('SimpleDecoderAndSanitizer', '0x60d73b8fb656047ab853c916dd59ee49830b02e25f56bba246c6cc8ce5ef6b0', [], config, acc);
 }
 
 function constructRoot(vaultContracts: VaultContracts) {
@@ -199,7 +210,7 @@ async function setMaxDelta(vault: UniversalStrategy<UniversalStrategySettings>, 
     const cls = await provider.getClassAt(vault.address.toString());
     const contract = new Contract(cls.abi, vault.address.toString(), provider as any);
     const setMaxDeltaCall = contract.populate('set_max_delta', [uint256.bnToUint256(Math.round(maxDelta * 1e18))]);
-    await Deployer.executeTransactions([setMaxDeltaCall], acc, provider, 'Set max delta');
+    // await Deployer.executeTransactions([setMaxDeltaCall], acc, provider, 'Set max delta');
 }
 
 async function test() {
@@ -212,18 +223,29 @@ async function test() {
 }
 if (require.main === module) {
     // deployStrategy();
-    const strategy = UniversalStrategies[1];
+    const strategy = UniversalStrategies.find(u => u.name.includes('WBTC'))!;
     const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
     const vaultContracts = {
         vault: strategy.address,
-        redeemRequest: strategy.additionalInfo.manager,
+        redeemRequest: strategy.additionalInfo.redeemRequestNFT,
         vaultAllocator: strategy.additionalInfo.vaultAllocator,
         manager: strategy.additionalInfo.manager
     }
-    // configureSettings(vaultContracts);
+    async function setConfig() {
+        await upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
+        // await configureSettings(vaultContracts);
+        // await setManagerRoot(vaultStrategy, ContractAddr.from(RELAYER));
+        // await grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
+        // await setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
+    }
+    setConfig();
+    // console.log(UniversalStrategies.map(u => ({
+    //     address: u.address.address,
+    //     name: u.name,
+    //     asset: u.depositTokens[0].address.address
+    // })))
     // deploySanitizer();
-    // setManagerRoot(vaultStrategy, ContractAddr.from('0x02D6cf6182259ee62A001EfC67e62C1fbc0dF109D2AA4163EB70D6d1074F0173'));
-    // upgrade('Manager', VAULT_ALLOCATOR_PACKAGE, vaultContracts.manager.toString());
-    grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), '0x2edf4edbed3f839e7f07dcd913e92299898ff4cf0ba532f8c572c66c5b331b2')
+    // upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
+    // grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), '0x2edf4edbed3f839e7f07dcd913e92299898ff4cf0ba532f8c572c66c5b331b2')
     // setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
 }
