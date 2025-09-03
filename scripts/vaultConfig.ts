@@ -106,9 +106,10 @@ async function showConfigMenu(): Promise<string> {
   console.log("1. Set Fees Configuration");
   console.log("2. Set Report Delay");
   console.log("3. Set Max Delta");
-  console.log("4. Exit");
+  console.log("4. Grant Oracle Role");
+  console.log("5. Exit");
 
-  const choice = await askQuestion("\nSelect an option (1-4): ");
+  const choice = await askQuestion("\nSelect an option (1-5): ");
   return choice.trim();
 }
 
@@ -251,6 +252,43 @@ async function setMaxDelta(vaultAddress: string): Promise<void> {
   }
 }
 
+async function grantOracleRole(vaultAddress: string): Promise<void> {
+  console.log("\n🔮 Grant Oracle Role");
+  console.log("This will grant the ORACLE_ROLE to a specified account.");
+
+  const oracleAccount = await askQuestion("Oracle account address: ");
+  try {
+    validateAndParseAddress(oracleAccount);
+  } catch (error) {
+    throw new Error(`Invalid oracle account address: ${oracleAccount}`);
+  }
+
+  console.log(`\n📋 Configuration Summary:`);
+  console.log(`  Vault: ${vaultAddress}`);
+  console.log(`  Oracle Account: ${oracleAccount}`);
+  console.log(`  Role: ORACLE_ROLE`);
+
+  const confirm = await askQuestion("\nConfirm granting oracle role? (y/n): ");
+  if (confirm.toLowerCase() !== "y" && confirm.toLowerCase() !== "yes") {
+    console.log("Operation cancelled.");
+    return;
+  }
+
+  try {
+    const response = await owner.execute({
+      contractAddress: vaultAddress,
+      entrypoint: "grant_role",
+      calldata: ["ORACLE_ROLE", oracleAccount],
+    });
+
+    console.log("✅ Oracle role granted successfully!");
+    console.log(`Transaction Hash: ${response.transaction_hash}`);
+  } catch (error) {
+    console.error("❌ Error granting oracle role:", error);
+    throw error;
+  }
+}
+
 async function main() {
   try {
     const envNetwork = await getNetworkEnv(provider);
@@ -276,11 +314,15 @@ async function main() {
           break;
 
         case "4":
+          await grantOracleRole(vaultAddress);
+          break;
+
+        case "5":
           console.log("👋 Goodbye!");
           return;
 
         default:
-          console.log("❌ Invalid choice. Please select 1-4.");
+          console.log("❌ Invalid choice. Please select 1-5.");
           break;
       }
 

@@ -13,14 +13,16 @@
     "declare:manager": "tsx declareContract.ts --contract Manager",
     "declare:price-router": "tsx declareContract.ts --contract PriceRouter",
     "declare:decoder-sanitizer": "tsx declareContract.ts --contract SimpleDecoderAndSanitizer",
+    "declare:aum-provider-4626": "tsx declareContract.ts --contract AumProvider4626",
     "deploy": "tsx deployContract.ts --contract",
+    "deploy:contract": "tsx deployContract.ts",
     "deploy:vault": "tsx deployVault.ts",
     "vault:config": "tsx vaultConfig.ts",
     "manager:config": "tsx managerConfig.ts"
   },
   "dependencies": {
-    "starknet": "^6.11.0",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "starknet": "7.6.4"
   },
   "devDependencies": {
     "@types/node": "^22.5.4",
