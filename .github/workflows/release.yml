@@ -17,16 +17,16 @@ jobs:
       matrix:
         include:
           - service: api
-            dockerfile: Dockerfile.api
+            dockerfile: backend/Dockerfile.api
             image: ghcr.io/forgeyields/svk-api
           - service: indexer
-            dockerfile: Dockerfile.indexer
+            dockerfile: backend/Dockerfile.indexer
             image: ghcr.io/forgeyields/svk-indexer
           - service: aum
-            dockerfile: Dockerfile.relayerOnChainAum
+            dockerfile: backend/Dockerfile.relayerOnChainAum
             image: ghcr.io/forgeyields/svk-aum
           - service: relayer-redeem
-            dockerfile: Dockerfile.relayerAutomaticRedeem
+            dockerfile: backend/Dockerfile.relayerAutomaticRedeem
             image: ghcr.io/forgeyields/svk-relayer-redeem
 
     steps:
@@ -57,7 +57,7 @@ jobs:
       - name: Build + Push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: backend
+          context: .
           file: ${{ matrix.dockerfile }}
           push: true
           platforms: linux/amd64
