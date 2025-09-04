@@ -165,9 +165,6 @@ importers:
       '@forge/logger':
         specifier: workspace:*
         version: link:../../libs/logger
-      '@forge/starknet':
-        specifier: workspace:*
-        version: link:../../libs/starknet
       '@nestjs/common':
         specifier: ^10.0.0
         version: 10.4.20(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)

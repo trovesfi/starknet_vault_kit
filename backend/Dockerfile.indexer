@@ -27,7 +27,6 @@ RUN mkdir -p node_modules/@forge node_modules/@apibara && \
     ln -sf ../../libs/config node_modules/@forge/config && \
     ln -sf ../../libs/db node_modules/@forge/db && \
     ln -sf ../../libs/logger node_modules/@forge/logger && \
-    ln -sf ../../libs/starknet node_modules/@forge/starknet && \
     ln -sf .pnpm/decimal.js@10.6.0/node_modules/decimal.js node_modules/decimal.js && \
     ln -sf .pnpm/starknet@7.6.4/node_modules/starknet node_modules/starknet && \
     ln -sf ../.pnpm/@apibara+protocol@0.4.9/node_modules/@apibara/protocol node_modules/@apibara/protocol && \
