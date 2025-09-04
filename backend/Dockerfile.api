@@ -1,0 +1,30 @@
+# ---- build ----
+FROM node:20-alpine AS build
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@9.9.0 --activate
+COPY . .
+RUN pnpm install --frozen-lockfile
+# build tous les workspaces (libs + apps) pour résoudre les liens pnpm
+RUN pnpm -r build
+# garder uniquement deps prod
+RUN pnpm prune --prod
+
+# ---- runtime ----
+FROM node:20-alpine
+ENV NODE_ENV=production
+WORKDIR /app
+# user non-root
+RUN addgroup -S app && adduser -S app -G app
+USER app
+# copier deps prod
+COPY --from=build /app/node_modules ./node_modules
+# copier manifests afin que les liens pnpm workspace restent valides
+COPY --from=build /app/package.json ./
+COPY --from=build /app/pnpm-workspace.yaml ./
+# copier le code compilé des apps et libs
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/libs ./libs
+# (facultatif) si Prisma client est généré dans libs/db, on garde son dossier
+CMD ["node", "apps/api/dist/main.js"]
+EXPOSE 3001
+    
