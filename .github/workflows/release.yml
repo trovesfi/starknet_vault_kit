@@ -25,6 +25,9 @@ jobs:
           - service: aum
             dockerfile: Dockerfile.relayerOnChainAum
             image: ghcr.io/forgeyields/svk-aum
+          - service: relayer-redeem
+            dockerfile: Dockerfile.relayerAutomaticRedeem
+            image: ghcr.io/forgeyields/svk-relayer-redeem
 
     steps:
       - name: Checkout
