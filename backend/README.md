@@ -46,40 +46,6 @@ The indexer only tracks these events:
 - `RedeemClaimed`
 - `IndexerStatus`
 
-## ⚠️ What's Missing / TODO
-
-### Incomplete Services
-
-1. **`relayerAutomaticRedeem`** - Service skeleton exists but needs implementation:
-   - Automatic detection of claimable redeems
-   - Transaction submission logic for claiming
-   - Error handling and retry mechanisms
-   - Configuration for gas management
-
-2. **`relayerOnChainAum`** - Basic structure exists but missing:
-   - AUM calculation and reporting logic
-   - Integration with AUM providers
-   - Scheduled execution framework
-   - On-chain transaction handling
-
-### Missing Features
-
-- **Authentication/Authorization** - All endpoints are currently public
-- **Rate Limiting** - No API rate limiting implemented
-- **Caching** - No caching layer for expensive operations
-- **Monitoring** - Basic logging exists but no metrics/alerting
-- **Error Recovery** - Limited error handling in indexer
-- **Database Migrations** - Schema exists but migration strategy incomplete
-- **Testing** - No test suite implemented
-- **API Documentation** - No OpenAPI/Swagger documentation
-
-### Configuration Gaps
-
-- **Environment Validation** - Incomplete validation of required env vars
-- **Network Configuration** - Limited network-specific configurations
-- **Service Discovery** - No service mesh or discovery mechanism
-- **Secrets Management** - Basic env vars, no proper secrets handling
-
 ## Quick Start with Docker (Development)
 
 1. **Clone and setup:**
