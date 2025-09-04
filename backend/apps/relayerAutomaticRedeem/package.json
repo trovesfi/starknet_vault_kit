@@ -1,25 +1,25 @@
 {
-  "name": "indexer",
+  "name": "relayerAutomaticRedeem",
   "version": "0.0.1",
-  "description": "Apibara indexer for StarkNet Vault Kit events",
+  "description": "Automatic redeem relayer for StarkNet Vault Kit - processes pending redeems automatically",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc",
     "dev": "nest start --watch",
-    "start": "node dist/apps/indexer/src/main.js",
+    "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\" --fix"
   },
   "dependencies": {
-    "@apibara/protocol": "^0.4.9",
-    "@apibara/starknet": "^0.5.0",
     "@forge/config": "workspace:*",
     "@forge/db": "workspace:*",
     "@forge/logger": "workspace:*",
-    "starknet": "^7.6.4",
-    "@nestjs/core": "^10.0.0",
-    "@nestjs/common": "^10.0.0"
+    "@forge/starknet": "workspace:*",
+    "cron": "^4.3.3",
+    "@nestjs/common": "^10.0.0",
+    "@nestjs/core": "^10.0.0"
   },
   "devDependencies": {
+    "@types/cron": "^2.0.0",
     "ts-node": "^10.9.1"
   }
 }

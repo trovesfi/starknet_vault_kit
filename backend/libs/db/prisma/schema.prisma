@@ -1,6 +1,5 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -64,6 +63,6 @@ model RedeemClaimed {
 
 model IndexerStatus {
   id                    Int      @id @default(1)
-  currentBlock          Int
-  updatedAt             DateTime @updatedAt
+  lastBlock      Int
+  updatedAt      DateTime @updatedAt
 }

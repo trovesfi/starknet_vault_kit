@@ -7,5 +7,5 @@
     "watchAssets": true,
     "assets": ["**/*.json", "**/*.md"]
   },
-  "entryFile": "apps/api/src/main"
+  "entryFile": "apps/relayerOnChainAum/src/main"
 }
