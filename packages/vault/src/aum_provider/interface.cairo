@@ -5,5 +5,5 @@
 #[starknet::interface]
 pub trait IBaseAumProvider<T> {
     fn aum(self: @T) -> u256;
-    fn report_aum(self: @T);
+    fn report(ref self: T);
 }

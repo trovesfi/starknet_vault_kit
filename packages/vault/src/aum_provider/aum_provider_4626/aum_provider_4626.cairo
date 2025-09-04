@@ -12,6 +12,7 @@ pub mod AumProvider4626 {
     use vault::aum_provider::aum_provider_4626::errors::Errors;
     use vault::aum_provider::aum_provider_4626::interface::IAumProvider4626;
     use vault::aum_provider::base_aum_provider::BaseAumProviderComponent;
+    use vault::vault::interface::IVaultDispatcherTrait;
     component!(
         path: BaseAumProviderComponent, storage: base_aum_provider, event: BaseAumProviderEvent,
     );
@@ -56,12 +57,18 @@ pub mod AumProvider4626 {
         fn get_aum(self: @BaseAumProviderComponent::ComponentState<ContractState>) -> u256 {
             let contract_state = self.get_contract();
             let strategy = contract_state.strategy4626.read();
-            let vault_address = self.vault.read().contract_address;
+            let vault_allocator_address = contract_state
+                .base_aum_provider
+                .vault
+                .read()
+                .vault_allocator();
+
+            // .vault.vault_allocator();
             let underlying_asset = strategy.asset();
             let underlying_dispatcher = ERC20ABIDispatcher { contract_address: underlying_asset };
-            let underlying_balance = underlying_dispatcher.balance_of(vault_address);
+            let underlying_balance = underlying_dispatcher.balance_of(vault_allocator_address);
             let strategy_shares = ERC20ABIDispatcher { contract_address: strategy.contract_address }
-                .balance_of(vault_address);
+                .balance_of(vault_allocator_address);
             let strategy_assets = if strategy_shares > 0 {
                 strategy.convert_to_assets(strategy_shares)
             } else {

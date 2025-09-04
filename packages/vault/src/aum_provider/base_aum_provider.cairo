@@ -33,8 +33,8 @@ pub mod BaseAumProviderComponent {
             Aum::get_aum(self)
         }
 
-        fn report_aum(self: @ComponentState<TContractState>) {
-            self.vault.read().report(Aum::get_aum(self));
+        fn report(ref self: ComponentState<TContractState>) {
+            self.vault.read().report(Aum::get_aum(@self));
         }
     }
 
