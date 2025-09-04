@@ -7,18 +7,25 @@
     # generate Prisma client
     RUN pnpm prisma:generate
     RUN pnpm -r build
-    RUN pnpm prune --prod
+    # skip pruning to preserve all workspace dependencies
     
     # ---- runtime ----
     FROM node:20-alpine
     ENV NODE_ENV=production
     WORKDIR /app
     RUN addgroup -S app && adduser -S app -G app
-    USER app
     COPY --from=build /app/node_modules ./node_modules
     COPY --from=build /app/package.json ./
     COPY --from=build /app/pnpm-workspace.yaml ./
     COPY --from=build /app/apps/relayerOnChainAum/dist ./apps/relayerOnChainAum/dist
     COPY --from=build /app/libs ./libs
-    CMD ["node", "apps/relayerOnChainAum/dist/main.js"]
+    # créer les symlinks pour les packages workspace
+    RUN mkdir -p node_modules/@forge && \
+        ln -sf ../../libs/config node_modules/@forge/config && \
+        ln -sf ../../libs/db node_modules/@forge/db && \
+        ln -sf ../../libs/logger node_modules/@forge/logger && \
+        ln -sf ../../libs/starknet node_modules/@forge/starknet && \
+        chown -R app:app .
+    USER app
+    CMD ["node", "apps/relayerOnChainAum/dist/apps/relayerOnChainAum/src/main.js"]
     
