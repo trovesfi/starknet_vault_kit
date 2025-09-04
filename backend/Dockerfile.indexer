@@ -17,6 +17,9 @@ RUN addgroup -S app && adduser -S app -G app
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 COPY --from=build /app/pnpm-workspace.yaml ./
+# copier les package.json des apps et libs pour les deps
+COPY --from=build /app/apps/indexer/package.json ./apps/indexer/
+COPY --from=build /app/libs/*/package.json ./libs/*/
 COPY --from=build /app/apps/indexer/dist ./apps/indexer/dist
 COPY --from=build /app/libs ./libs
 # créer les symlinks pour les packages workspace et dependencies manquantes
@@ -25,6 +28,7 @@ RUN mkdir -p node_modules/@forge node_modules/@apibara && \
     ln -sf ../../libs/db node_modules/@forge/db && \
     ln -sf ../../libs/logger node_modules/@forge/logger && \
     ln -sf ../../libs/starknet node_modules/@forge/starknet && \
+    ln -sf .pnpm/decimal.js@10.6.0/node_modules/decimal.js node_modules/decimal.js && \
     ln -sf .pnpm/starknet@7.6.4/node_modules/starknet node_modules/starknet && \
     ln -sf ../.pnpm/@apibara+protocol@0.4.9/node_modules/@apibara/protocol node_modules/@apibara/protocol && \
     ln -sf ../.pnpm/@apibara+starknet@0.5.0/node_modules/@apibara/starknet node_modules/@apibara/starknet && \
