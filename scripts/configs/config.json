@@ -5,7 +5,7 @@
   },
   "mainnet": {
     "hash": {
-      "Vault": "0x5058442b8c9d18dc0fdfa4beea4c2d5dc843bc1d121dc6f8acba9f9252b4072",
+      "Vault": "0x516d937281e70cc858ddc2a5a2c98fe97782d290564c6e94d2e8c91dd70cc2f",
       "VaultAllocator": "0x7f2faf80d197cbfd7286fa0b8328e9d15eff219138611573beb8280a92712e5",
       "RedeemRequest": "0x213cf96be799ccd7d4775e3798c880c093197ac19313d6032f43c8d22a6346a",
       "AvnuMiddleware": "0x142dff46d17eb94e9c77a771968ccd8257d8eed5d6a84c3e37f50e15dc39a9f",
