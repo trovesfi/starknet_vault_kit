@@ -14,8 +14,7 @@
     "declare:price-router": "tsx declareContract.ts --contract PriceRouter",
     "declare:decoder-sanitizer": "tsx declareContract.ts --contract SimpleDecoderAndSanitizer",
     "declare:aum-provider-4626": "tsx declareContract.ts --contract AumProvider4626",
-    "deploy": "tsx deployContract.ts --contract",
-    "deploy:contract": "tsx deployContract.ts",
+    "deploy:contract": "tsx deployContract.ts --contract",
     "deploy:vault": "tsx deployVault.ts",
     "vault:config": "tsx vaultConfig.ts",
     "manager:config": "tsx managerConfig.ts"

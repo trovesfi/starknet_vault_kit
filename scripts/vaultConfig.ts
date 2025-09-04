@@ -3,6 +3,7 @@ import {
   CairoUint256,
   RpcProvider,
   validateAndParseAddress,
+  hash,
 } from "starknet";
 import dotenv from "dotenv";
 import { getNetworkEnv, WAD } from "./utils";
@@ -278,7 +279,7 @@ async function grantOracleRole(vaultAddress: string): Promise<void> {
     const response = await owner.execute({
       contractAddress: vaultAddress,
       entrypoint: "grant_role",
-      calldata: ["ORACLE_ROLE", oracleAccount],
+      calldata: [hash.starknetKeccak("ORACLE_ROLE").toString(), oracleAccount],
     });
 
     console.log("✅ Oracle role granted successfully!");
