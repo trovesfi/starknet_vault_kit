@@ -4,6 +4,8 @@
     RUN corepack enable && corepack prepare pnpm@9.9.0 --activate
     COPY . .
     RUN pnpm install --frozen-lockfile
+    # generate Prisma client
+    RUN pnpm prisma:generate
     RUN pnpm -r build
     RUN pnpm prune --prod
     
