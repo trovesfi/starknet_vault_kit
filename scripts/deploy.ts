@@ -12,7 +12,8 @@ interface VaultContracts {
     manager: ContractAddr;
 }
 
-const config = getMainnetConfig();
+console.log('url', process.env.RPC_URL);
+const config = getMainnetConfig(process.env.RPC_URL!, 'latest');
 const acc = Deployer.getAccount('strkfarmadmin', config);
 const OWNER = ContractAddr.from(acc.address);
 const FEE_RECIPIENT = ContractAddr.from(acc.address);
@@ -128,8 +129,14 @@ async function configureSettings(vaultContracts: VaultContracts) {
 }
 
 async function deploySanitizer() {
+    const calls = await Deployer.prepareMultiDeployContracts([{
+        contract_name: 'SimpleDecoderAndSanitizer',
+        package_name: VAULT_ALLOCATOR_PACKAGE,
+        constructorData: []
+    }], config, acc);
+
     // const ch = await Deployer.myDeclare('SimpleDecoderAndSanitizer', VAULT_ALLOCATOR_PACKAGE, config, acc);
-    await Deployer.deployContract('SimpleDecoderAndSanitizer', '0x60d73b8fb656047ab853c916dd59ee49830b02e25f56bba246c6cc8ce5ef6b0', [], config, acc);
+    await Deployer.executeDeployCalls(calls, acc, config.provider);
 }
 
 function constructRoot(vaultContracts: VaultContracts) {
@@ -207,10 +214,12 @@ async function grantRole(vault: UniversalStrategy<UniversalStrategySettings>, ro
 
 async function setMaxDelta(vault: UniversalStrategy<UniversalStrategySettings>, maxDelta: number) {
     const provider = config.provider;
+    console.log('getting cls');
     const cls = await provider.getClassAt(vault.address.toString());
+    console.log('getting cls2', cls.abi.length);
     const contract = new Contract(cls.abi, vault.address.toString(), provider as any);
     const setMaxDeltaCall = contract.populate('set_max_delta', [uint256.bnToUint256(Math.round(maxDelta * 1e18))]);
-    // await Deployer.executeTransactions([setMaxDeltaCall], acc, provider, 'Set max delta');
+    await Deployer.executeTransactions([setMaxDeltaCall], acc, provider, 'Set max delta');
 }
 
 async function test() {
@@ -221,9 +230,64 @@ async function test() {
 
     const result = await contract.call('')
 }
+
+async function deployPriceRouter() {
+    const provider = config.provider;
+    const PRAMGA = '0x2a85bd616f912537c50a49a4076db02c00b29b2cdc8a197ce92ed1837fa875b';
+    const calls = await Deployer.prepareMultiDeployContracts([{
+        contract_name: 'PriceRouter',
+        package_name: VAULT_ALLOCATOR_PACKAGE,
+        constructorData: [OWNER, PRAMGA]
+    }], config, acc);
+    await Deployer.executeTransactions(calls.map(c => c.call), acc, provider, 'Deploy Price Router');
+}
+
+async function deployAvnuMiddleware() {
+    const provider = config.provider;
+    const AVNU = '0x4270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f';
+    const PRICE_ROUTER = '0x05e83Fa38D791d2dba8E6f487758A9687FfEe191A6Cf8a6c5761ab0a110DB837'
+    const calls = await Deployer.prepareMultiDeployContracts([{
+        contract_name: 'AvnuMiddleware',
+        package_name: VAULT_ALLOCATOR_PACKAGE,
+        constructorData: [
+            OWNER, 
+            AVNU,
+            PRICE_ROUTER,
+            100, 0 // 1% max slippage
+        ]
+    }], config, acc);
+    await Deployer.executeDeployCalls(calls, acc, provider);
+}
+
+async function configurePriceRouter() {
+    const PRICE_ROUTER = '0x05e83Fa38D791d2dba8E6f487758A9687FfEe191A6Cf8a6c5761ab0a110DB837'
+    const cls = await config.provider.getClassAt(PRICE_ROUTER);
+    const contract = new Contract(cls.abi, PRICE_ROUTER, config.provider as any);
+
+    // ETH/WBTC/USDC/USDT/STRK
+    const assetIdMap = [{
+        asset: Global.getDefaultTokens().find(t => t.symbol === 'USDC')?.address!,
+        id: '6148332971638477636'
+    }, {
+        asset: Global.getDefaultTokens().find(t => t.symbol === 'USDT')?.address!,
+        id: '6148333044652921668'
+    }, {
+        asset: Global.getDefaultTokens().find(t => t.symbol === 'STRK')?.address!,
+        id: '6004514686061859652'
+    }, {
+        asset: Global.getDefaultTokens().find(t => t.symbol === 'WBTC')?.address!,
+        id: '6287680677296296772'
+    }, {
+        asset: Global.getDefaultTokens().find(t => t.symbol === 'ETH')?.address!,
+        id: '19514442401534788'
+    }]
+    const calls = assetIdMap.map(m => contract.populate('set_asset_to_id', [m.asset.toString(), m.id]));
+    await Deployer.executeTransactions(calls, acc, config.provider, 'Configure Price Router');
+}
+
 if (require.main === module) {
     // deployStrategy();
-    const strategy = UniversalStrategies.find(u => u.name.includes('WBTC'))!;
+    const strategy = UniversalStrategies.find(u => u.name.includes('USDC'))!;
     const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
     const vaultContracts = {
         vault: strategy.address,
@@ -231,14 +295,26 @@ if (require.main === module) {
         vaultAllocator: strategy.additionalInfo.vaultAllocator,
         manager: strategy.additionalInfo.manager
     }
+    
     async function setConfig() {
-        await upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
+        // await upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
         // await configureSettings(vaultContracts);
         // await setManagerRoot(vaultStrategy, ContractAddr.from(RELAYER));
         // await grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
         // await setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
+
+        for (let i=0; i < UniversalStrategies.length; i++) {
+            const u = UniversalStrategies[i];
+            const strategy = new UniversalStrategy(config, pricer, u);
+            // await setManagerRoot(strategy, ContractAddr.from(RELAYER));
+            await setMaxDelta(strategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 24));
+            // await grantRole(u, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
+        }
     }
     setConfig();
+    // configurePriceRouter();
+    // deployPriceRouter();
+    // deployAvnuMiddleware();
     // console.log(UniversalStrategies.map(u => ({
     //     address: u.address.address,
     //     name: u.name,

@@ -8,6 +8,7 @@ pub mod SimpleDecoderAndSanitizer {
     use vault_allocator::decoders_and_sanitizers::base_decoder_and_sanitizer::BaseDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::erc4626_decoder_and_sanitizer::Erc4626DecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::vesu_decoder_and_sanitizer::VesuDecoderAndSanitizerComponent;
+    use vault_allocator::decoders_and_sanitizers::defi_spring_snf_style::defi_spring_snf_style_decoder_and_sanitizer::DefiSpringSNFStyleDecoderAndSanitizerComponent;
 
     component!(
         path: BaseDecoderAndSanitizerComponent,
@@ -32,6 +33,12 @@ pub mod SimpleDecoderAndSanitizer {
         event: AvnuExchangeDecoderAndSanitizerEvent,
     );
 
+    component!(
+        path: DefiSpringSNFStyleDecoderAndSanitizerComponent,
+        storage: defi_spring_snf_style_decoder_and_sanitizer,
+        event: DefiSpringSNFStyleDecoderAndSanitizerEvent,
+    );
+
     #[abi(embed_v0)]
     impl BaseDecoderAndSanitizerImpl =
         BaseDecoderAndSanitizerComponent::BaseDecoderAndSanitizerImpl<ContractState>;
@@ -50,6 +57,12 @@ pub mod SimpleDecoderAndSanitizer {
             ContractState,
         >;
 
+    #[abi(embed_v0)]
+    impl DefiSpringSNFStyleDecoderAndSanitizerImpl =
+        DefiSpringSNFStyleDecoderAndSanitizerComponent::DefiSpringSNFStyleDecoderAndSanitizerImpl<
+            ContractState,
+        >;
+
     #[storage]
     pub struct Storage {
         #[substorage(v0)]
@@ -60,6 +73,8 @@ pub mod SimpleDecoderAndSanitizer {
         pub vesu_decoder_and_sanitizer: VesuDecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
         pub avnu_exchange_decoder_and_sanitizer: AvnuExchangeDecoderAndSanitizerComponent::Storage,
+        #[substorage(v0)]
+        pub defi_spring_snf_style_decoder_and_sanitizer: DefiSpringSNFStyleDecoderAndSanitizerComponent::Storage,
     }
 
     #[event]
@@ -73,5 +88,7 @@ pub mod SimpleDecoderAndSanitizer {
         VesuDecoderAndSanitizerEvent: VesuDecoderAndSanitizerComponent::Event,
         #[flat]
         AvnuExchangeDecoderAndSanitizerEvent: AvnuExchangeDecoderAndSanitizerComponent::Event,
+        #[flat]
+        DefiSpringSNFStyleDecoderAndSanitizerEvent: DefiSpringSNFStyleDecoderAndSanitizerComponent::Event,
     }
 }

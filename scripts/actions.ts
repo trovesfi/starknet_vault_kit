@@ -13,7 +13,7 @@ const pricer = new Pricer(config, Global.getDefaultTokens());
 async function main() {
     pricer.start();
     await pricer.waitTillReady();
-    const strategy = UniversalStrategies[0];
+    const strategy = UniversalStrategies.find(u => u.name.includes('ETH'))!;
     const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
     const AMOUNT = new Web3Number(0.001793, 8);
 
@@ -37,7 +37,7 @@ async function main() {
   
     console.log(`AUM: ${JSON.stringify(await vaultStrategy.getAUM())}`);
     // console.log(`Positions: ${JSON.stringify(await vaultStrategy.getVaultPositions())}`);
-    // console.log(`Net APY: ${JSON.stringify(await vaultStrategy.netAPY())}`);
+    console.log(`Net APY: ${JSON.stringify(await vaultStrategy.netAPY())}`);
     // console.log(`Health factors: ${JSON.stringify(await vaultStrategy.getVesuHealthFactors())}`)
 }
 
