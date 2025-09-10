@@ -201,7 +201,8 @@ pub mod Vault {
         pub caller: ContractAddress, // Address that initiated the liquidity transfer
         pub amount: u256, // Amount of assets brought back to vault
         pub new_buffer: u256, // New buffer amount after the transfer
-        pub new_aum: u256 // New AUM amount after the transfer
+        pub new_aum: u256, // New AUM amount after the transfer
+        pub epoch: u256 // Epoch when the liquidity was brought back
     }
 
     /// Initialize the vault with configuration parameters
@@ -792,8 +793,13 @@ pub mod Vault {
             let new_aum = self.aum.read() - amount; // Calculate new AUM
             self.buffer.write(new_buffer); // Increase buffer
             self.aum.write(new_aum); // Decrease deployed AUM
-            
-            self.emit(BringLiquidity { caller, amount, new_buffer, new_aum });
+
+            self
+                .emit(
+                    BringLiquidity {
+                        caller, amount, new_buffer, new_aum, epoch: self.epoch.read(),
+                    },
+                );
         }
 
         // --- State Getter Functions ---

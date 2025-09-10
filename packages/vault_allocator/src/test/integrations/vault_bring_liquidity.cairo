@@ -3,11 +3,10 @@
 // Licensed under the MIT License. See LICENSE file for details.
 
 use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
-use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
+use openzeppelin::interfaces::erc4626::IERC4626Dispatcher;
 use snforge_std::{map_entry_address, store};
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
 use vault_allocator::mocks::vault::MockVault::MockVaultTraitDispatcherTrait;
-use vault_allocator::test::register::VESU_SINGLETON;
 use vault_allocator::test::utils::{
     ManageLeaf, OWNER, STRATEGIST, WAD, _add_vault_allocator_leafs, _get_proofs_using_tree,
     _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_erc20_mock, deploy_manager,
@@ -19,7 +18,7 @@ use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 #[test]
 fn test_manage_vault_with_merkle_verification_bring_liquidity() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
 
     let underlying_token = deploy_erc20_mock();

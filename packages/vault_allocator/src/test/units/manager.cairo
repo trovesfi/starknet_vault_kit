@@ -8,11 +8,9 @@ use openzeppelin::interfaces::accesscontrol::{
 use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use openzeppelin::interfaces::security::pausable::{IPausableDispatcher, IPausableDispatcherTrait};
 use openzeppelin::interfaces::upgrades::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
-use starknet::ContractAddress;
 use vault_allocator::manager::interface::{IManagerDispatcher, IManagerDispatcherTrait};
 use vault_allocator::manager::manager::Manager::{OWNER_ROLE, PAUSER_ROLE};
 use vault_allocator::mocks::counter::{ICounterDispatcher, ICounterDispatcherTrait};
-use vault_allocator::test::register::VESU_SINGLETON;
 use vault_allocator::test::utils::{
     DUMMY_ADDRESS, ManageLeaf, OWNER, STRATEGIST, WAD, _add_erc4626_leafs, _get_proofs_using_tree,
     _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_counter, deploy_erc20_mock,
@@ -24,7 +22,7 @@ use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 #[test]
 fn test_constructor() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let access_control_dispatcher = IAccessControlDispatcher {
         contract_address: manager.contract_address,
     };
@@ -37,7 +35,6 @@ fn test_constructor() {
     let has_role = access_control_dispatcher.has_role(PAUSER_ROLE, OWNER());
     assert(has_role, 'Pauser is not set correctly');
 
-    assert(manager.vesu_singleton() == VESU_SINGLETON(), ' singleton is not set correctly');
     assert(
         manager.vault_allocator() == vault_allocator.contract_address,
         'allocator is not set correctly',
@@ -48,7 +45,7 @@ fn test_constructor() {
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_upgrade_not_owner() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let (_, counter_class_hash) = deploy_counter();
     IUpgradeableDispatcher { contract_address: manager.contract_address }
         .upgrade(counter_class_hash);
@@ -57,7 +54,7 @@ fn test_upgrade_not_owner() {
 #[test]
 fn test_upgrade() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let (_, counter_class_hash) = deploy_counter();
     cheat_caller_address_once(manager.contract_address, OWNER());
     IUpgradeableDispatcher { contract_address: manager.contract_address }
@@ -68,7 +65,7 @@ fn test_upgrade() {
 #[test]
 fn test_set_manage_root() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
 
     let target = 0x123.try_into().unwrap();
     let root = 0x456;
@@ -84,7 +81,7 @@ fn test_set_manage_root() {
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_set_manage_root_not_owner() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
 
     let target = 0x123.try_into().unwrap();
     let root = 0x456;
@@ -95,7 +92,7 @@ fn test_set_manage_root_not_owner() {
 #[test]
 fn test_pause() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let manager_dispatcher = IManagerDispatcher { contract_address: manager.contract_address };
     let pausable_dispatcher = IPausableDispatcher { contract_address: manager.contract_address };
 
@@ -111,14 +108,14 @@ fn test_pause() {
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_pause_not_pauser() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     manager.pause();
 }
 
 #[test]
 fn test_unpause() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let manager_dispatcher = IManagerDispatcher { contract_address: manager.contract_address };
     let pausable_dispatcher = IPausableDispatcher { contract_address: manager.contract_address };
 
@@ -136,7 +133,7 @@ fn test_unpause() {
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_unpause_not_owner() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     cheat_caller_address_once(manager.contract_address, OWNER());
     manager.pause();
     manager.unpause();
@@ -146,7 +143,7 @@ fn test_unpause_not_owner() {
 #[should_panic(expected: "Inconsistent lengths")]
 fn test_manage_vault_with_merkle_verification_inconsistent_lengths_1() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     manager
         .manage_vault_with_merkle_verification(
             array![array![].span()].span(),
@@ -161,7 +158,7 @@ fn test_manage_vault_with_merkle_verification_inconsistent_lengths_1() {
 #[should_panic(expected: "Inconsistent lengths")]
 fn test_manage_vault_with_merkle_verification_inconsistent_lengths_2() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     manager
         .manage_vault_with_merkle_verification(
             array![array![].span()].span(),
@@ -176,7 +173,7 @@ fn test_manage_vault_with_merkle_verification_inconsistent_lengths_2() {
 #[should_panic(expected: "Inconsistent lengths")]
 fn test_manage_vault_with_merkle_verification_inconsistent_lengths_3() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
 
     manager
         .manage_vault_with_merkle_verification(
@@ -192,7 +189,7 @@ fn test_manage_vault_with_merkle_verification_inconsistent_lengths_3() {
 #[should_panic(expected: "Inconsistent lengths")]
 fn test_manage_vault_with_merkle_verification_inconsistent_lengths_4() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
 
     manager
         .manage_vault_with_merkle_verification(
@@ -208,7 +205,7 @@ fn test_manage_vault_with_merkle_verification_inconsistent_lengths_4() {
 #[should_panic(expected: "Invalid manage proof")]
 fn test_manage_vault_with_merkle_verification_invalid_proof() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
     let underlying = deploy_erc20_mock();
     let erc4626 = deploy_erc4626_mock(underlying);
@@ -265,7 +262,7 @@ fn test_manage_vault_with_merkle_verification_invalid_proof() {
 #[test]
 fn test_manage_vault_with_merkle_verification_valid_proof() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
     let underlying = deploy_erc20_mock();
     let erc4626 = deploy_erc4626_mock(underlying);

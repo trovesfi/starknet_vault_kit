@@ -56,14 +56,11 @@ pub fn deploy_vault_allocator() -> IVaultAllocatorDispatcher {
     IVaultAllocatorDispatcher { contract_address: vault_allocator_address }
 }
 
-pub fn deploy_manager(
-    vault_allocator: IVaultAllocatorDispatcher, vesu_singleton: ContractAddress,
-) -> IManagerDispatcher {
+pub fn deploy_manager(vault_allocator: IVaultAllocatorDispatcher) -> IManagerDispatcher {
     let manager = declare("Manager").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
     OWNER().serialize(ref calldata);
     vault_allocator.contract_address.serialize(ref calldata);
-    vesu_singleton.serialize(ref calldata);
     let (manager_address, _) = manager.deploy(@calldata).unwrap();
     IManagerDispatcher { contract_address: manager_address }
 }

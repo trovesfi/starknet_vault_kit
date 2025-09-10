@@ -77,18 +77,17 @@ pub mod test {
     // pub mod creator;
     pub mod register;
     pub mod utils;
-    // pub mod units {
-    //     pub mod manager;
-    //     pub mod vault_allocator;
-    // }
-    pub mod integrations {
-        // pub mod avnu;
-        pub mod vault_bring_liquidity;
-        // pub mod vesu_v1;
+    pub mod units {
+        pub mod manager;
+        pub mod vault_allocator;
     }
-    // pub mod scenarios {
-//     pub mod leveraged_loop_staked_ether;
-//     pub mod stable_carry_loop;
-// }
+    pub mod integrations {
+        pub mod avnu;
+        pub mod vault_bring_liquidity;
+        pub mod vesu_v1;
+    }
+    pub mod scenarios {
+        pub mod stable_carry_loop;
+    }
 }
 
