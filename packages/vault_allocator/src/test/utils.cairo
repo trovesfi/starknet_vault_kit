@@ -77,12 +77,6 @@ pub fn deploy_counter() -> (ICounterDispatcher, ClassHash) {
     (ICounterDispatcher { contract_address: counter_address }, *counter.class_hash)
 }
 
-pub fn deploy_flashloan_mock() -> ContractAddress {
-    let flashloan = declare("FlashLoanSingletonMock").unwrap().contract_class();
-    let mut calldata = ArrayTrait::new();
-    let (flashloan_address, _) = flashloan.deploy(@calldata).unwrap();
-    flashloan_address
-}
 
 pub fn deploy_erc4626_mock(underlying: ContractAddress) -> ContractAddress {
     let erc4626 = declare("Erc4626Mock").unwrap().contract_class();
@@ -588,33 +582,6 @@ pub fn _add_vesu_leafs(
     }
 }
 
-
-pub fn _add_vesu_flash_loan_leafs(
-    ref leafs: Array<ManageLeaf>,
-    ref leaf_index: u256,
-    vault: ContractAddress,
-    decoder_and_sanitizer: ContractAddress,
-    manager: ContractAddress,
-    asset: ContractAddress,
-    is_legacy: bool,
-) {
-    let mut argument_addresses = ArrayTrait::new();
-    manager.serialize(ref argument_addresses);
-    asset.serialize(ref argument_addresses);
-    is_legacy.serialize(ref argument_addresses);
-
-    leafs
-        .append(
-            ManageLeaf {
-                decoder_and_sanitizer,
-                target: manager,
-                selector: selector!("flash_loan"),
-                argument_addresses: argument_addresses.span(),
-                description: "Flash loan" + " " + get_symbol(asset),
-            },
-        );
-    leaf_index += 1;
-}
 
 // ========================================= AVNU =========================================
 pub fn _add_avnu_leafs(

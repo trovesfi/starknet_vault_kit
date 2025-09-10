@@ -69,7 +69,6 @@ pub mod mocks {
     pub mod counter;
     pub mod erc20;
     pub mod erc4626;
-    pub mod flashloan;
     pub mod vault;
 }
 
