@@ -7,7 +7,7 @@ pub mod Errors {
         panic!("Insufficient output: {} < {}", out, min);
     }
 
-    pub fn slippage_exceeds_max(slippage: u256) {
+    pub fn slippage_exceeds_max(slippage: u16) {
         panic!("Slippage exceeds max: {}", slippage);
     }
 
@@ -21,5 +21,9 @@ pub mod Errors {
 
     pub fn allowed_calls_per_period_zero() {
         panic!("Allowed calls per period is zero");
+    }
+
+    pub fn caller_not_vault_allocator() {
+        panic!("Caller not vault allocator");
     }
 }

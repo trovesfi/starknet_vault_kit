@@ -3,12 +3,14 @@
 // Licensed under the MIT License. See LICENSE file for details.
 use alexandria_math::i257::I257Impl;
 use starknet::ContractAddress;
-use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, wstETH};
-use vault_allocator::test::utils::{
-    ManageLeaf, _add_avnu_leafs, _add_vesu_leafs, _pad_leafs_to_power_of_two, generate_merkle_tree,
-    get_leaf_hash,
+use vault_allocator::merkle_tree::base::{
+    ManageLeaf, _pad_leafs_to_power_of_two, generate_merkle_tree, get_leaf_hash,
 };
+use vault_allocator::merkle_tree::integrations::avnu::{AvnuConfig, _add_avnu_leafs};
+use vault_allocator::merkle_tree::integrations::vesu_v1::{VesuV1Config, _add_vesu_v1_leafs};
+use vault_allocator::merkle_tree::registery::{ETH, GENESIS_POOL_ID, wstETH};
 use super::utils::DUMMY_ADDRESS;
+
 
 #[derive(PartialEq, Drop, Serde, Debug, Clone)]
 pub struct ManageLeafAdditionalData {
@@ -36,26 +38,28 @@ fn test_creator() {
     // INTEGRATIONS
 
     let pool_id = GENESIS_POOL_ID;
-    let mut assets_to_supply = ArrayTrait::new();
-    assets_to_supply.append(wstETH());
-    let mut assets_to_borrow_per_assets_to_supply = ArrayTrait::new();
-    assets_to_borrow_per_assets_to_supply.append(array![ETH()].span());
 
-    _add_vesu_leafs(
+    _add_vesu_v1_leafs(
         ref leafs,
         ref leaf_index,
         vault_allocator,
         decoder_and_sanitizer,
-        pool_id,
-        assets_to_supply.span(),
-        assets_to_borrow_per_assets_to_supply.span(),
+        array![
+            VesuV1Config { pool_id, collateral_asset: wstETH(), debt_assets: array![ETH()].span() },
+        ]
+            .span(),
     );
 
     let mut pairs_to_swap = ArrayTrait::new();
     pairs_to_swap.append((ETH(), wstETH()));
 
     _add_avnu_leafs(
-        ref leafs, ref leaf_index, vault_allocator, decoder_and_sanitizer, router, pairs_to_swap,
+        ref leafs,
+        ref leaf_index,
+        vault_allocator,
+        decoder_and_sanitizer,
+        router,
+        array![AvnuConfig { sell_token: ETH(), buy_token: wstETH() }].span(),
     );
 
     let leaf_used = leafs.len();

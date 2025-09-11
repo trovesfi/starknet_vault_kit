@@ -10,12 +10,15 @@ use openzeppelin::interfaces::security::pausable::{IPausableDispatcher, IPausabl
 use openzeppelin::interfaces::upgrades::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
 use vault_allocator::manager::interface::{IManagerDispatcher, IManagerDispatcherTrait};
 use vault_allocator::manager::manager::Manager::{OWNER_ROLE, PAUSER_ROLE};
+use vault_allocator::merkle_tree::base::{
+    ManageLeaf, _get_proofs_using_tree, _pad_leafs_to_power_of_two, generate_merkle_tree,
+};
+use vault_allocator::merkle_tree::integrations::erc4626::_add_erc4626_leafs;
 use vault_allocator::mocks::counter::{ICounterDispatcher, ICounterDispatcherTrait};
 use vault_allocator::test::utils::{
-    DUMMY_ADDRESS, ManageLeaf, OWNER, STRATEGIST, WAD, _add_erc4626_leafs, _get_proofs_using_tree,
-    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_counter, deploy_erc20_mock,
-    deploy_erc4626_mock, deploy_manager, deploy_simple_decoder_and_sanitizer,
-    deploy_vault_allocator, generate_merkle_tree,
+    DUMMY_ADDRESS, OWNER, STRATEGIST, WAD, cheat_caller_address_once, deploy_counter,
+    deploy_erc20_mock, deploy_erc4626_mock, deploy_manager, deploy_simple_decoder_and_sanitizer,
+    deploy_vault_allocator,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 

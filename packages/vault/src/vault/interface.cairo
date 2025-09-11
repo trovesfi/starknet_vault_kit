@@ -45,5 +45,6 @@ pub trait IVault<TContractState> {
     fn last_report_timestamp(self: @TContractState) -> u64;
     fn max_delta(self: @TContractState) -> u256;
     fn due_assets_from_id(self: @TContractState, id: u256) -> u256;
+    fn due_assets_from_owner(self: @TContractState, owner: ContractAddress) -> u256;
 }
 

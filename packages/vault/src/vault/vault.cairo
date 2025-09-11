@@ -24,7 +24,10 @@ pub mod Vault {
     use openzeppelin::interfaces::erc20::{
         ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
     };
-    use openzeppelin::interfaces::erc721::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
+    use openzeppelin::interfaces::erc721::{
+        ERC721ABIDispatcher, ERC721ABIDispatcherTrait, IERC721EnumerableDispatcher,
+        IERC721EnumerableDispatcherTrait,
+    };
     use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::security::pausable::PausableComponent;
@@ -880,6 +883,25 @@ pub mod Vault {
         fn max_delta(self: @ContractState) -> u256 {
             self.max_delta.read()
         }
+
+        fn due_assets_from_owner(self: @ContractState, owner: ContractAddress) -> u256 {
+            let balance = ERC721ABIDispatcher {
+                contract_address: self.redeem_request.read().contract_address,
+            }
+                .balance_of(owner);
+            let mut total_due_assets = 0;
+            for i in 0..balance {
+                total_due_assets += self
+                    .due_assets_from_id(
+                        IERC721EnumerableDispatcher {
+                            contract_address: self.redeem_request.read().contract_address,
+                        }
+                            .token_of_owner_by_index(owner, i),
+                    );
+            }
+            total_due_assets
+        }
+
 
         fn due_assets_from_id(self: @ContractState, id: u256) -> u256 {
             let redeem_request_info = self.redeem_request.read().id_to_info(id);
