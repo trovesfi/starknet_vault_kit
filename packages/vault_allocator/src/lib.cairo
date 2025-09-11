@@ -17,7 +17,8 @@ pub mod manager {
 pub mod integration_interfaces {
     pub mod avnu;
     pub mod pragma;
-    pub mod vesu;
+    pub mod vesu_v1;
+    pub mod vesu_v2;
 }
 
 pub mod periphery {
@@ -25,6 +26,11 @@ pub mod periphery {
         pub mod errors;
         pub mod interface;
         pub mod price_router;
+    }
+    pub mod price_router_vesu {
+        pub mod errors;
+        pub mod interface;
+        pub mod price_router_vesu;
     }
 }
 
