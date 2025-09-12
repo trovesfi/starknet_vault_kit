@@ -8,6 +8,8 @@ pub mod AvnuMiddleware {
     use core::num::traits::Zero;
     use openzeppelin::access::ownable::OwnableComponent;
     use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+    use openzeppelin::interfaces::upgrades::IUpgradeable;
+    use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use openzeppelin::utils::math;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
@@ -27,16 +29,20 @@ pub mod AvnuMiddleware {
 
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
+    component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
 
     #[abi(embed_v0)]
     impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
-    impl InternalImpl = OwnableComponent::InternalImpl<ContractState>;
+    impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
+    impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
 
     #[storage]
     struct Storage {
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
+        #[substorage(v0)]
+        upgradeable: UpgradeableComponent::Storage,
         price_router: IPriceRouterDispatcher,
         vault_allocator: ContractAddress,
         slippage: u16,
@@ -50,6 +56,8 @@ pub mod AvnuMiddleware {
     pub enum Event {
         #[flat]
         OwnableEvent: OwnableComponent::Event,
+        #[flat]
+        UpgradeableEvent: UpgradeableComponent::Event,
         ConfigUpdated: ConfigUpdated,
     }
 
@@ -77,6 +85,13 @@ pub mod AvnuMiddleware {
         self._set_config(slippage, period, allowed_calls_per_period)
     }
 
+    #[abi(embed_v0)]
+    impl UpgradeableImpl of IUpgradeable<ContractState> {
+        fn upgrade(ref self: ContractState, new_class_hash: starknet::ClassHash) {
+            self.ownable.assert_only_owner();
+            self.upgradeable.upgrade(new_class_hash);
+        }
+    }
 
     #[abi(embed_v0)]
     impl AvnuMiddlewareViewImpl of IAvnuMiddleware<ContractState> {
