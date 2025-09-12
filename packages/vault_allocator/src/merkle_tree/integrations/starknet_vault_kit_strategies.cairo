@@ -1,12 +1,12 @@
 use openzeppelin::interfaces::erc4626::{ERC4626ABIDispatcher, ERC4626ABIDispatcherTrait};
 use starknet::ContractAddress;
-use vault_allocator::merkle_tree::base::{ManageLeaf, get_symbol};
+use vesu_vaults::merkle_tree::base::{ManageLeaf, get_symbol};
 
 
 pub fn _add_starknet_vault_kit_strategies(
     ref leafs: Array<ManageLeaf>,
     ref leaf_index: u256,
-    vault: ContractAddress,
+    vault_allocator: ContractAddress,
     decoder_and_sanitizer: ContractAddress,
     starknet_vault_kit_strategy: ContractAddress,
 ) {
@@ -42,7 +42,7 @@ pub fn _add_starknet_vault_kit_strategies(
                 decoder_and_sanitizer,
                 target: starknet_vault_kit_strategy,
                 selector: selector!("deposit"),
-                argument_addresses: array![vault.into()].span(),
+                argument_addresses: array![vault_allocator.into()].span(),
                 description: "Deposit"
                     + " "
                     + get_symbol(asset)
@@ -54,18 +54,18 @@ pub fn _add_starknet_vault_kit_strategies(
         );
     leaf_index += 1;
 
-    // Withdrawals
+    // Minting
 
     leafs
         .append(
             ManageLeaf {
                 decoder_and_sanitizer,
                 target: starknet_vault_kit_strategy,
-                selector: selector!("withdraw"),
-                argument_addresses: array![vault.into(), vault.into()].span(),
-                description: "Withdraw"
+                selector: selector!("mint"),
+                argument_addresses: array![vault_allocator.into()].span(),
+                description: "Mint"
                     + " "
-                    + get_symbol(asset)
+                    + get_symbol(starknet_vault_kit_strategy)
                     + " "
                     + "from"
                     + " "
@@ -81,7 +81,7 @@ pub fn _add_starknet_vault_kit_strategies(
                 decoder_and_sanitizer,
                 target: starknet_vault_kit_strategy,
                 selector: selector!("request_redeem"),
-                argument_addresses: array![vault.into(), vault.into()].span(),
+                argument_addresses: array![vault_allocator.into(), vault_allocator.into()].span(),
                 description: "Request Redeem" + " " + get_symbol(starknet_vault_kit_strategy),
             },
         );

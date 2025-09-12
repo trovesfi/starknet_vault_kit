@@ -1,12 +1,12 @@
 use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
 use starknet::ContractAddress;
-use vault_allocator::merkle_tree::base::{ManageLeaf, get_symbol};
+use vesu_vaults::merkle_tree::base::{ManageLeaf, get_symbol};
 
 
 pub fn _add_erc4626_leafs(
     ref leafs: Array<ManageLeaf>,
     ref leaf_index: u256,
-    vault: ContractAddress,
+    vault_allocator: ContractAddress,
     decoder_and_sanitizer: ContractAddress,
     erc4626: ContractAddress,
 ) {
@@ -40,7 +40,7 @@ pub fn _add_erc4626_leafs(
                 decoder_and_sanitizer,
                 target: erc4626,
                 selector: selector!("deposit"),
-                argument_addresses: array![vault.into()].span(),
+                argument_addresses: array![vault_allocator.into()].span(),
                 description: "Deposit"
                     + " "
                     + get_symbol(asset)
@@ -60,7 +60,7 @@ pub fn _add_erc4626_leafs(
                 decoder_and_sanitizer,
                 target: erc4626,
                 selector: selector!("withdraw"),
-                argument_addresses: array![vault.into(), vault.into()].span(),
+                argument_addresses: array![vault_allocator.into(), vault_allocator.into()].span(),
                 description: "Withdraw"
                     + " "
                     + get_symbol(asset)
@@ -80,7 +80,7 @@ pub fn _add_erc4626_leafs(
                 decoder_and_sanitizer,
                 target: erc4626,
                 selector: selector!("mint"),
-                argument_addresses: array![vault.into()].span(),
+                argument_addresses: array![vault_allocator.into()].span(),
                 description: "Mint"
                     + " "
                     + get_symbol(erc4626)
@@ -100,7 +100,7 @@ pub fn _add_erc4626_leafs(
                 decoder_and_sanitizer,
                 target: erc4626,
                 selector: selector!("redeem"),
-                argument_addresses: array![vault.into(), vault.into()].span(),
+                argument_addresses: array![vault_allocator.into(), vault_allocator.into()].span(),
                 description: "Redeem"
                     + " "
                     + get_symbol(erc4626)

@@ -1,6 +1,6 @@
 use core::to_byte_array::FormatAsByteArray;
 use starknet::ContractAddress;
-use vault_allocator::merkle_tree::base::{ManageLeaf, get_symbol};
+use vesu_vaults::merkle_tree::base::{ManageLeaf, get_symbol};
 
 
 #[derive(PartialEq, Drop, Serde, Debug, Clone)]

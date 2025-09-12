@@ -1,5 +1,5 @@
 use starknet::ContractAddress;
-use vault_allocator::merkle_tree::base::{ManageLeaf, _contains_address, get_symbol};
+use vesu_vaults::merkle_tree::base::{ManageLeaf, _contains_address, get_symbol};
 
 
 #[derive(PartialEq, Drop, Serde, Debug, Clone, starknet::Store)]
@@ -12,7 +12,7 @@ pub struct AvnuConfig {
 pub fn _add_avnu_leafs(
     ref leafs: Array<ManageLeaf>,
     ref leaf_index: u256,
-    vault: ContractAddress,
+    vault_allocator: ContractAddress,
     decoder_and_sanitizer: ContractAddress,
     router: ContractAddress,
     avnu_configs: Span<AvnuConfig>,
@@ -49,7 +49,7 @@ pub fn _add_avnu_leafs(
         let mut argument_addresses = ArrayTrait::new();
         sell_token_address.serialize(ref argument_addresses);
         buy_token_address.serialize(ref argument_addresses);
-        vault.serialize(ref argument_addresses);
+        vault_allocator.serialize(ref argument_addresses);
 
         leafs
             .append(

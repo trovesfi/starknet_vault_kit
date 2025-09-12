@@ -43,17 +43,6 @@ pub fn VESU_SINGLETON() -> ContractAddress {
 pub const GENESIS_POOL_ID: felt252 =
     2198503327643286920898110335698706244522220458610657370981979460625005526824;
 
-// genesis pool v-tokens
-
-pub fn VESU_GENESIS_POOL_V_TOKEN_WSTETH() -> ContractAddress {
-    0x7cb1a46709214b94f51655be696a4ff6f9bdbbb6edb19418b6a55d190536048.try_into().unwrap()
-}
-
-pub fn VESU_GENESIS_POOL_V_TOKEN_USDT() -> ContractAddress {
-    0x40e480d202b47eb9335c31fc328ecda216231425dae74f87d1a97e6e7901dce.try_into().unwrap()
-}
-
-
 // PRAGMA
 
 pub fn PRAGMA() -> ContractAddress {
