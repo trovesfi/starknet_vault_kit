@@ -1,7 +1,7 @@
 use core::to_byte_array::FormatAsByteArray;
 use starknet::ContractAddress;
-use vesu_vaults::merkle_tree::base::{ManageLeaf, get_symbol};
-use vesu_vaults::merkle_tree::registery::VESU_SINGLETON;
+use vault_allocator::merkle_tree::base::{ManageLeaf, get_symbol};
+use vault_allocator::merkle_tree::registery::VESU_SINGLETON;
 
 #[derive(PartialEq, Drop, Serde, Debug, Clone)]
 pub struct VesuV1Config {

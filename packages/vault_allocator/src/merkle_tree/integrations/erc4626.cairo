@@ -1,6 +1,6 @@
 use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
 use starknet::ContractAddress;
-use vesu_vaults::merkle_tree::base::{ManageLeaf, get_symbol};
+use vault_allocator::merkle_tree::base::{ManageLeaf, get_symbol};
 
 
 pub fn _add_erc4626_leafs(

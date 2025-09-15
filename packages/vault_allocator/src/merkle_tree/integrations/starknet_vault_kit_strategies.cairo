@@ -1,6 +1,6 @@
 use openzeppelin::interfaces::erc4626::{ERC4626ABIDispatcher, ERC4626ABIDispatcherTrait};
 use starknet::ContractAddress;
-use vesu_vaults::merkle_tree::base::{ManageLeaf, get_symbol};
+use vault_allocator::merkle_tree::base::{ManageLeaf, get_symbol};
 
 
 pub fn _add_starknet_vault_kit_strategies(

@@ -750,7 +750,7 @@ pub mod Vault {
             let management_fee_shares = math::u256_mul_div(
                 management_fee_assets,
                 total_supply + 1,
-                (total_assets - management_fee_assets) + 1,
+                (total_assets - (management_fee_assets + performance_fee_assets)) + 1,
                 Rounding::Floor,
             );
             if (management_fee_shares.is_non_zero()) {

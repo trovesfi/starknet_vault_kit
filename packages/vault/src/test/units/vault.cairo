@@ -1559,7 +1559,7 @@ fn setup_report_simple_deposit_epoch_0() -> (
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_buffer + expected_aum - (expected_management_fees_assets) + 1,
+        expected_buffer + expected_aum - (expected_management_fees_assets + 0) + 1,
         Rounding::Floor,
     );
 
@@ -1663,16 +1663,15 @@ fn setup_report_simple_deposit_with_profit_epoch_1() -> (
         * MANAGEMENT_FEES()
         * REPORT_DELAY().into())
         / (Vault::WAD * Vault::YEAR.into());
+    let net_profit_after_mgmt = profit_amount - expected_management_fees_assets;
+    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
-
-    let net_profit_after_mgmt = profit_amount - expected_management_fees_assets;
-    let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
     let performance_fee_shares = math::u256_mul_div(
         expected_performance_fee_assets,
         expected_total_supply + 1,
@@ -1776,7 +1775,7 @@ fn setup_report_simple_deposit_with_loss_epoch_1() -> (
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        (expected_total_assets - expected_management_fees_assets) + 1,
+        (expected_total_assets - (expected_management_fees_assets + 0)) + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -1893,19 +1892,19 @@ fn setup_report_simple_redeem_unhandled_with_profit_epoch_1() -> (
 
     let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
 
-    let management_fee_shares = math::u256_mul_div(
-        expected_management_fees_assets,
-        expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
-        Rounding::Floor,
-    );
-    expected_total_supply = expected_total_supply + management_fee_shares;
-
     let management_fee_assets_for_shareholders = expected_management_fees_assets
         - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
     let performance_fee_shares = math::u256_mul_div(
         expected_performance_fee_assets,
         expected_total_supply + 1,
@@ -2044,19 +2043,19 @@ fn setup_report_simple_redeem_matched_with_profit_epoch_1() -> (
 
     let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
 
-    let management_fee_shares = math::u256_mul_div(
-        expected_management_fees_assets,
-        expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
-        Rounding::Floor,
-    );
-    expected_total_supply = expected_total_supply + management_fee_shares;
-
     let management_fee_assets_for_shareholders = expected_management_fees_assets
         - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
     let performance_fee_shares = math::u256_mul_div(
         expected_performance_fee_assets,
         expected_total_supply + 1,
@@ -2190,19 +2189,19 @@ fn setup_report_simple_redeem_handled_with_bring_liquidity_with_profit_epoch_1()
 
     let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
 
-    let management_fee_shares = math::u256_mul_div(
-        expected_management_fees_assets,
-        expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
-        Rounding::Floor,
-    );
-    expected_total_supply = expected_total_supply + management_fee_shares;
-
     let management_fee_assets_for_shareholders = expected_management_fees_assets
         - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
     let performance_fee_shares = math::u256_mul_div(
         expected_performance_fee_assets,
         expected_total_supply + 1,
@@ -2336,19 +2335,19 @@ fn setup_report_simple_redeem_not_handled_with_bring_liquidity_with_profit_epoch
 
     let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
 
-    let management_fee_shares = math::u256_mul_div(
-        expected_management_fees_assets,
-        expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
-        Rounding::Floor,
-    );
-    expected_total_supply = expected_total_supply + management_fee_shares;
-
     let management_fee_assets_for_shareholders = expected_management_fees_assets
         - (expected_nominal - expected_redeem_assets_after_cut_epoch_1);
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
+    
+    let management_fee_shares = math::u256_mul_div(
+        expected_management_fees_assets,
+        expected_total_supply + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        Rounding::Floor,
+    );
+    expected_total_supply = expected_total_supply + management_fee_shares;
     let performance_fee_shares = math::u256_mul_div(
         expected_performance_fee_assets,
         expected_total_supply + 1,
@@ -2486,11 +2485,12 @@ fn setup_report_simple_redeem_unhandled_with_loss_epoch_1() -> (
         - cut;
 
     let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+    let expected_performance_fee_assets = 0;
 
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2635,11 +2635,12 @@ fn setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_1() ->
         - cut;
 
     let expected_total_assets = liqudity_after - expected_redeem_assets_after_cut_epoch_1;
+    let expected_performance_fee_assets = 0;
 
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2820,11 +2821,12 @@ fn setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_2_hand
 
     let expected_total_assets = liqudity_after
         - (expected_redeem_assets_after_cut_epoch_1 + expected_redeem_assets_after_cut_epoch_2);
+    let expected_performance_fee_assets = 0;
 
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets) + 1,
+        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;

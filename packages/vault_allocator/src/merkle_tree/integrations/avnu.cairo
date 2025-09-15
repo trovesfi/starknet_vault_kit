@@ -1,5 +1,5 @@
 use starknet::ContractAddress;
-use vesu_vaults::merkle_tree::base::{ManageLeaf, _contains_address, get_symbol};
+use vault_allocator::merkle_tree::base::{ManageLeaf, _contains_address, get_symbol};
 
 
 #[derive(PartialEq, Drop, Serde, Debug, Clone, starknet::Store)]
