@@ -14,8 +14,8 @@ pub mod VesuV2DecoderAndSanitizerComponent {
     #[derive(Drop, Debug, PartialEq, starknet::Event)]
     pub enum Event {}
 
-    #[embeddable_as(VesuDecoderAndSanitizerImpl)]
-    impl VesuDecoderAndSanitizer<
+    #[embeddable_as(VesuV2DecoderAndSanitizerImpl)]
+    impl VesuV2DecoderAndSanitizer<
         TContractState, +HasComponent<TContractState>,
     > of IVesuV2DecoderAndSanitizer<ComponentState<TContractState>> {
         fn modify_position(
