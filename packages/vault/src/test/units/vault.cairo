@@ -290,7 +290,7 @@ fn test_redeem_not_implemented() {
 }
 
 #[test]
-#[should_panic(expected: "Not implemented")]
+#[should_panic(expected: ('ERC4626: exceeds max withdraw',))]
 fn test_withdraw_not_implemented() {
     let (underlying, vault, _) = set_up();
 
