@@ -93,6 +93,13 @@ async function main() {
         "SimpleDecoderAndSanitizer"
       );
       break;
+    case "VesuV2SpecificDecoderAndSanitizer":
+      await declareContract(
+        envNetwork,
+        "vault_allocator",
+        "VesuV2SpecificDecoderAndSanitizer"
+      );
+      break;
     case "AumProvider4626":
       await declareContract(envNetwork, "vault", "AumProvider4626");
       break;

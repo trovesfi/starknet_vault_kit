@@ -47,6 +47,7 @@ pub mod decoders_and_sanitizers {
     pub mod decoder_custom_types;
     pub mod interface;
     pub mod simple_decoder_and_sanitizer;
+    pub mod vesu_v2_specific_decoder_and_sanitizer;
     pub mod avnu_exchange_decoder_and_sanitizer {
         pub mod avnu_exchange_decoder_and_sanitizer;
         pub mod interface;

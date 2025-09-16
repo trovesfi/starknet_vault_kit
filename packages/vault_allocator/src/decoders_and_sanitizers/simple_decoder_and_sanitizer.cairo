@@ -10,8 +10,6 @@ pub mod SimpleDecoderAndSanitizer {
     use vault_allocator::decoders_and_sanitizers::multiply_decoder_and_sanitizer::multiply_decoder_and_sanitizer::MultiplyDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::starknet_vault_kit_decoder_and_sanitizer::starknet_vault_kit_decoder_and_sanitizer::StarknetVaultKitDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::vesu_decoder_and_sanitizer::VesuDecoderAndSanitizerComponent;
-    use vault_allocator::decoders_and_sanitizers::vesu_v2_decoder_and_sanitizer::vesu_v2_decoder_and_sanitizer::VesuV2DecoderAndSanitizerComponent;
-
 
     component!(
         path: BaseDecoderAndSanitizerComponent,
@@ -48,11 +46,6 @@ pub mod SimpleDecoderAndSanitizer {
         event: MultiplyDecoderAndSanitizerEvent,
     );
 
-    component!(
-        path: VesuV2DecoderAndSanitizerComponent,
-        storage: vesu_v2_decoder_and_sanitizer,
-        event: VesuV2DecoderAndSanitizerEvent,
-    );
 
     #[abi(embed_v0)]
     impl BaseDecoderAndSanitizerImpl =
@@ -76,10 +69,6 @@ pub mod SimpleDecoderAndSanitizer {
     impl MultiplyDecoderAndSanitizerImpl =
         MultiplyDecoderAndSanitizerComponent::MultiplyDecoderAndSanitizerImpl<ContractState>;
 
-    // TODO: duplicate selector not supported, find a way to fix this
-    // #[abi(embed_v0)]
-    // impl VesuV2DecoderAndSanitizerImpl =
-    //     VesuV2DecoderAndSanitizerComponent::VesuV2DecoderAndSanitizerImpl<ContractState>;
 
     #[storage]
     pub struct Storage {
@@ -95,8 +84,6 @@ pub mod SimpleDecoderAndSanitizer {
         pub starknet_vault_kit_decoder_and_sanitizer: StarknetVaultKitDecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
         pub multiply_decoder_and_sanitizer: MultiplyDecoderAndSanitizerComponent::Storage,
-        #[substorage(v0)]
-        pub vesu_v2_decoder_and_sanitizer: VesuV2DecoderAndSanitizerComponent::Storage,
     }
 
     #[event]
@@ -114,7 +101,5 @@ pub mod SimpleDecoderAndSanitizer {
         StarknetVaultKitDecoderAndSanitizerEvent: StarknetVaultKitDecoderAndSanitizerComponent::Event,
         #[flat]
         MultiplyDecoderAndSanitizerEvent: MultiplyDecoderAndSanitizerComponent::Event,
-        #[flat]
-        VesuV2DecoderAndSanitizerEvent: VesuV2DecoderAndSanitizerComponent::Event,
     }
 }
