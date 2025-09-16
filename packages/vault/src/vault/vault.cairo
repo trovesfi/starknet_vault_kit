@@ -33,7 +33,7 @@ pub mod Vault {
     use openzeppelin::security::pausable::PausableComponent;
     use openzeppelin::token::erc20::extensions::erc4626::ERC4626Component::Fee;
     use openzeppelin::token::erc20::extensions::erc4626::{
-        DefaultConfig, ERC4626Component, ERC4626DefaultNoFees, ERC4626DefaultNoLimits,
+        DefaultConfig, ERC4626Component, ERC4626DefaultNoFees,
     };
     use openzeppelin::token::erc20::{
         DefaultConfig as ERC20DefaultConfig, ERC20Component, ERC20HooksEmptyImpl,
@@ -86,6 +86,62 @@ pub mod Vault {
     #[abi(embed_v0)]
     impl ERC4626Impl = ERC4626Component::ERC4626Impl<ContractState>;
     impl ERC4626InternalImpl = ERC4626Component::InternalImpl<ContractState>;
+
+    // --- Custom ERC4626 Limits Implementation ---
+    // Custom implementation of deposit/withdraw limits
+    // Uses max u256 as sentinel value for "unlimited"
+    impl ERC4626LimitConfigImpl of ERC4626Component::LimitConfigTrait<ContractState> {
+        /// The max deposit allowed.
+        /// Returns None for no limit (when limit equals max u256)
+        fn deposit_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
+        ) -> Option<u256> {
+            let contract_state = self.get_contract();
+            let limit = contract_state.deposit_limit.read();
+            if limit == core::integer::BoundedInt::max() {
+                Option::None
+            } else {
+                Option::Some(limit)
+            }
+        }
+
+        /// The max mint allowed.
+        /// Returns None for no limit (when limit equals max u256)
+        fn mint_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
+        ) -> Option<u256> {
+            let contract_state = self.get_contract();
+            let limit = contract_state.mint_limit.read();
+            if limit == core::integer::BoundedInt::max() {
+                Option::None
+            } else {
+                Option::Some(limit)
+            }
+        }
+
+        /// The max withdraw allowed.
+        /// Always returns Some(0) since withdrawals are disabled
+        /// Withdrawals are disabled in this vault - use request_redeem instead
+        fn withdraw_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
+        ) -> Option<u256> {
+            Option::Some(0)
+        }
+
+        /// The max redeem allowed.
+        /// Returns None for no limit (when limit equals max u256)
+        fn redeem_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
+        ) -> Option<u256> {
+            let contract_state = self.get_contract();
+            let limit = contract_state.redeem_limit.read();
+            if limit == core::integer::BoundedInt::max() {
+                Option::None
+            } else {
+                Option::Some(limit)
+            }
+        }
+    }
 
     // --- ERC20 Implementation ---
     // Share token functionality with standard and camelCase interfaces
@@ -145,7 +201,12 @@ pub mod Vault {
         management_fees: u256, // Annual management fee rate (in WAD)
         performance_fees: u256, // Performance fee on profits (in WAD)
         // --- Redemption System ---
-        redeem_request: IRedeemRequestDispatcher // NFT contract for tracking redemption requests
+        redeem_request: IRedeemRequestDispatcher, // NFT contract for tracking redemption requests
+        // --- ERC4626 Limits ---
+        // Note: max u256 means unlimited, any other value (including 0) sets a specific limit
+        deposit_limit: u256, // Maximum deposit amount 
+        mint_limit: u256, // Maximum mint amount 
+        redeem_limit: u256 // Maximum redeem amount 
     }
 
     // --- Events ---
@@ -253,6 +314,13 @@ pub mod Vault {
 
         // Initialize timestamp for fee calculations
         self.last_report_timestamp.write(get_block_timestamp());
+
+        // Initialize limits to max u256 (unlimited)
+        // max u256 is used as sentinel value for "no limit"
+        let max_limit: u256 = core::integer::BoundedInt::max();
+        self.deposit_limit.write(max_limit);
+        self.mint_limit.write(max_limit);
+        self.redeem_limit.write(max_limit);
 
         self
             .emit(
@@ -882,6 +950,44 @@ pub mod Vault {
         /// Get maximum allowed AUM change per report (in WAD format)
         fn max_delta(self: @ContractState) -> u256 {
             self.max_delta.read()
+        }
+
+        // --- Limit Configuration Functions ---
+
+        /// Set the deposit limit (max u256 for unlimited, any other value including 0 for specific limit)
+        /// Only callable by owner
+        fn set_deposit_limit(ref self: ContractState, limit: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.deposit_limit.write(limit);
+        }
+
+        /// Set the mint limit (max u256 for unlimited, any other value including 0 for specific limit)
+        /// Only callable by owner
+        fn set_mint_limit(ref self: ContractState, limit: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.mint_limit.write(limit);
+        }
+
+        /// Set the redeem limit (max u256 for unlimited, any other value including 0 for specific limit)
+        /// Only callable by owner
+        fn set_redeem_limit(ref self: ContractState, limit: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.redeem_limit.write(limit);
+        }
+
+        /// Get the current deposit limit (max u256 means unlimited)
+        fn get_deposit_limit(self: @ContractState) -> u256 {
+            self.deposit_limit.read()
+        }
+
+        /// Get the current mint limit (max u256 means unlimited)
+        fn get_mint_limit(self: @ContractState) -> u256 {
+            self.mint_limit.read()
+        }
+
+        /// Get the current redeem limit (max u256 means unlimited)
+        fn get_redeem_limit(self: @ContractState) -> u256 {
+            self.redeem_limit.read()
         }
 
         fn due_assets_from_owner(self: @ContractState, owner: ContractAddress) -> u256 {
