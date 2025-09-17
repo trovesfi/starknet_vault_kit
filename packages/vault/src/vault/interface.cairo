@@ -50,9 +50,7 @@ pub trait IVault<TContractState> {
     // Limit configuration functions
     fn set_deposit_limit(ref self: TContractState, limit: u256);
     fn set_mint_limit(ref self: TContractState, limit: u256);
-    fn set_redeem_limit(ref self: TContractState, limit: u256);
     fn get_deposit_limit(self: @TContractState) -> u256;
     fn get_mint_limit(self: @TContractState) -> u256;
-    fn get_redeem_limit(self: @TContractState) -> u256;
 }
 

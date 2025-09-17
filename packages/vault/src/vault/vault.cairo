@@ -19,7 +19,7 @@
 
 #[starknet::contract]
 pub mod Vault {
-    use core::num::traits::Zero;
+    use core::num::traits::{Zero, Bounded};
     use openzeppelin::access::accesscontrol::AccessControlComponent;
     use openzeppelin::interfaces::erc20::{
         ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
@@ -91,55 +91,65 @@ pub mod Vault {
     // Custom implementation of deposit/withdraw limits
     // Uses max u256 as sentinel value for "unlimited"
     impl ERC4626LimitConfigImpl of ERC4626Component::LimitConfigTrait<ContractState> {
-        /// The max deposit allowed.
+        /// The max deposit allowed based on cap.
+        /// Returns remaining capacity: cap - total_assets
         /// Returns None for no limit (when limit equals max u256)
         fn deposit_limit(
             self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
         ) -> Option<u256> {
             let contract_state = self.get_contract();
             let limit = contract_state.deposit_limit.read();
-            if limit == core::integer::BoundedInt::max() {
+            if limit == Bounded::MAX {
                 Option::None
             } else {
-                Option::Some(limit)
+                let total_assets = self.get_total_assets();
+                if total_assets >= limit {
+                    Option::Some(0) 
+                } else {
+                    Option::Some(limit - total_assets)
+                }
             }
         }
 
-        /// The max mint allowed.
+        /// The max mint allowed based on cap.
+        /// Returns shares equivalent of remaining deposit capacity
         /// Returns None for no limit (when limit equals max u256)
         fn mint_limit(
             self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
         ) -> Option<u256> {
             let contract_state = self.get_contract();
             let limit = contract_state.mint_limit.read();
-            if limit == core::integer::BoundedInt::max() {
+            if limit == Bounded::MAX {
                 Option::None
             } else {
-                Option::Some(limit)
+                let deposit_limit_opt = self.deposit_limit(receiver);
+                match deposit_limit_opt {
+                    Option::None => Option::None,
+                    Option::Some(deposit_remaining) => {
+                        if deposit_remaining == 0 {
+                            Option::Some(0)
+                        } else {
+                            let shares = self._convert_to_shares(deposit_remaining, Rounding::Floor);
+                            Option::Some(shares)
+                        }
+                    }
+                }
             }
         }
 
         /// The max withdraw allowed.
-        /// Always returns Some(0) since withdrawals are disabled
-        /// Withdrawals are disabled in this vault - use request_redeem instead
+        /// Not implemented - withdrawals are disabled in this vault
         fn withdraw_limit(
             self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
         ) -> Option<u256> {
-            Option::Some(0)
+            Option::None
         }
 
         /// The max redeem allowed.
-        /// Returns None for no limit (when limit equals max u256)
         fn redeem_limit(
             self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
         ) -> Option<u256> {
-            let contract_state = self.get_contract();
-            let limit = contract_state.redeem_limit.read();
-            if limit == core::integer::BoundedInt::max() {
-                Option::None
-            } else {
-                Option::Some(limit)
-            }
+            Option::None
         }
     }
 
@@ -206,7 +216,6 @@ pub mod Vault {
         // Note: max u256 means unlimited, any other value (including 0) sets a specific limit
         deposit_limit: u256, // Maximum deposit amount 
         mint_limit: u256, // Maximum mint amount 
-        redeem_limit: u256 // Maximum redeem amount 
     }
 
     // --- Events ---
@@ -317,11 +326,9 @@ pub mod Vault {
 
         // Initialize limits to max u256 (unlimited)
         // max u256 is used as sentinel value for "no limit"
-        let max_limit: u256 = core::integer::BoundedInt::max();
+        let max_limit: u256 = Bounded::MAX;
         self.deposit_limit.write(max_limit);
         self.mint_limit.write(max_limit);
-        self.redeem_limit.write(max_limit);
-
         self
             .emit(
                 Report {
@@ -968,13 +975,6 @@ pub mod Vault {
             self.mint_limit.write(limit);
         }
 
-        /// Set the redeem limit (max u256 for unlimited, any other value including 0 for specific limit)
-        /// Only callable by owner
-        fn set_redeem_limit(ref self: ContractState, limit: u256) {
-            self.access_control.assert_only_role(OWNER_ROLE);
-            self.redeem_limit.write(limit);
-        }
-
         /// Get the current deposit limit (max u256 means unlimited)
         fn get_deposit_limit(self: @ContractState) -> u256 {
             self.deposit_limit.read()
@@ -983,11 +983,6 @@ pub mod Vault {
         /// Get the current mint limit (max u256 means unlimited)
         fn get_mint_limit(self: @ContractState) -> u256 {
             self.mint_limit.read()
-        }
-
-        /// Get the current redeem limit (max u256 means unlimited)
-        fn get_redeem_limit(self: @ContractState) -> u256 {
-            self.redeem_limit.read()
         }
 
         fn due_assets_from_owner(self: @ContractState, owner: ContractAddress) -> u256 {
