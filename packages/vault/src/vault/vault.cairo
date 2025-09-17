@@ -865,6 +865,10 @@ pub mod Vault {
             ref self: ContractState, amount: u256,
         ) { // Amount of assets to bring back
             let caller = get_caller_address();
+            // Only the registered vault allocator can bring liquidity
+            if (caller != self.vault_allocator.read()) {
+                Errors::caller_is_not_vault_allocator();
+            }
             ERC20ABIDispatcher { contract_address: self.erc4626.asset() }
                 .transfer_from(caller, starknet::get_contract_address(), amount);
             let new_buffer = self.buffer.read() + amount; // Calculate new buffer

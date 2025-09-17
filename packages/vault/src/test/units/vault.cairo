@@ -2,7 +2,7 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
-use core::num::traits::{Zero, Bounded};
+use core::num::traits::{Bounded, Zero};
 use openzeppelin::interfaces::accesscontrol::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
@@ -1668,7 +1668,9 @@ fn setup_report_simple_deposit_with_profit_epoch_1() -> (
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -1897,11 +1899,13 @@ fn setup_report_simple_redeem_unhandled_with_profit_epoch_1() -> (
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
-    
+
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2048,11 +2052,13 @@ fn setup_report_simple_redeem_matched_with_profit_epoch_1() -> (
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
-    
+
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2194,11 +2200,13 @@ fn setup_report_simple_redeem_handled_with_bring_liquidity_with_profit_epoch_1()
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
-    
+
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2340,11 +2348,13 @@ fn setup_report_simple_redeem_not_handled_with_bring_liquidity_with_profit_epoch
 
     let net_profit_after_mgmt = profit_amount - management_fee_assets_for_shareholders;
     let expected_performance_fee_assets = PERFORMANCE_FEES() * net_profit_after_mgmt / Vault::WAD;
-    
+
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2490,7 +2500,9 @@ fn setup_report_simple_redeem_unhandled_with_loss_epoch_1() -> (
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2640,7 +2652,9 @@ fn setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_1() ->
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2826,7 +2840,9 @@ fn setup_report_simple_redeem_unhandled_not_enough_buffer_with_loss_epoch_2_hand
     let management_fee_shares = math::u256_mul_div(
         expected_management_fees_assets,
         expected_total_supply + 1,
-        expected_total_assets - (expected_management_fees_assets + expected_performance_fee_assets) + 1,
+        expected_total_assets
+            - (expected_management_fees_assets + expected_performance_fee_assets)
+            + 1,
         Rounding::Floor,
     );
     expected_total_supply = expected_total_supply + management_fee_shares;
@@ -2889,20 +2905,29 @@ fn test_deposit_limit() {
     cheat_caller_address_once(vault.contract_address, OWNER());
     vault.set_deposit_limit(deposit_cap);
     assert(vault.get_deposit_limit() == deposit_cap, 'Deposit limit not set');
-    assert(erc4626_dispatcher.max_deposit(DUMMY_ADDRESS()) == deposit_cap, 'Initial max deposit wrong');
+    assert(
+        erc4626_dispatcher.max_deposit(DUMMY_ADDRESS()) == deposit_cap, 'Initial max deposit wrong',
+    );
     let first_deposit = Vault::WAD * 30;
     cheat_caller_address_once(underlying, OWNER());
     ERC20ABIDispatcher { contract_address: underlying }.transfer(DUMMY_ADDRESS(), first_deposit);
     cheat_caller_address_once(underlying, DUMMY_ADDRESS());
-    ERC20ABIDispatcher { contract_address: underlying }.approve(vault.contract_address, first_deposit);
+    ERC20ABIDispatcher { contract_address: underlying }
+        .approve(vault.contract_address, first_deposit);
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
     erc4626_dispatcher.deposit(first_deposit, DUMMY_ADDRESS());
     let expected_remaining = deposit_cap - first_deposit;
-    assert(erc4626_dispatcher.max_deposit(DUMMY_ADDRESS()) == expected_remaining, 'Max deposit not reduced');
+    assert(
+        erc4626_dispatcher.max_deposit(DUMMY_ADDRESS()) == expected_remaining,
+        'Max deposit not reduced',
+    );
     cheat_caller_address_once(vault.contract_address, OWNER());
     vault.set_deposit_limit(Bounded::MAX);
     assert(vault.get_deposit_limit() == Bounded::MAX, 'Unlimited not set');
-    assert(erc4626_dispatcher.max_deposit(DUMMY_ADDRESS()) == Bounded::MAX, 'Max deposit not unlimited');
+    assert(
+        erc4626_dispatcher.max_deposit(DUMMY_ADDRESS()) == Bounded::MAX,
+        'Max deposit not unlimited',
+    );
 }
 
 #[test]
@@ -2922,9 +2947,10 @@ fn test_mint_limit() {
     cheat_caller_address_once(underlying, OWNER());
     ERC20ABIDispatcher { contract_address: underlying }.transfer(DUMMY_ADDRESS(), first_deposit);
     cheat_caller_address_once(underlying, DUMMY_ADDRESS());
-    ERC20ABIDispatcher { contract_address: underlying }.approve(vault.contract_address, first_deposit);
+    ERC20ABIDispatcher { contract_address: underlying }
+        .approve(vault.contract_address, first_deposit);
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
-    let shares_minted = erc4626_dispatcher.deposit(first_deposit, DUMMY_ADDRESS());
+    erc4626_dispatcher.deposit(first_deposit, DUMMY_ADDRESS());
     let remaining_deposit_cap = deposit_cap - first_deposit; // 70 WAD remaining
     let expected_max_mint = erc4626_dispatcher.convert_to_shares(remaining_deposit_cap);
     let actual_max_mint = erc4626_dispatcher.max_mint(DUMMY_ADDRESS());
@@ -2933,7 +2959,7 @@ fn test_mint_limit() {
     vault.set_deposit_limit(Bounded::MAX);
     cheat_caller_address_once(vault.contract_address, OWNER());
     vault.set_mint_limit(Bounded::MAX);
-    
+
     assert(erc4626_dispatcher.max_mint(DUMMY_ADDRESS()) == Bounded::MAX, 'Max mint not unlimited');
 }
 
@@ -2942,7 +2968,7 @@ fn test_mint_limit() {
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_set_deposit_limit_unauthorized() {
     let (_, vault, _) = set_up();
-    
+
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
     vault.set_deposit_limit(Vault::WAD);
 }
@@ -2951,7 +2977,7 @@ fn test_set_deposit_limit_unauthorized() {
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_set_mint_limit_unauthorized() {
     let (_, vault, _) = set_up();
-    
+
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
     vault.set_mint_limit(Vault::WAD);
 }
@@ -2961,37 +2987,53 @@ fn test_set_mint_limit_unauthorized() {
 fn test_deposit_with_limit() {
     let (underlying, vault, _) = set_up();
     let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
-    
+
     let deposit_limit = Vault::WAD;
     cheat_caller_address_once(vault.contract_address, OWNER());
     vault.set_deposit_limit(deposit_limit);
-    
+
     cheat_caller_address_once(underlying, OWNER());
     ERC20ABIDispatcher { contract_address: underlying }.transfer(DUMMY_ADDRESS(), Vault::WAD * 2);
     cheat_caller_address_once(underlying, DUMMY_ADDRESS());
-    ERC20ABIDispatcher { contract_address: underlying }.approve(vault.contract_address, Vault::WAD * 2);
-    
+    ERC20ABIDispatcher { contract_address: underlying }
+        .approve(vault.contract_address, Vault::WAD * 2);
+
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
     erc4626_dispatcher.deposit(deposit_limit, DUMMY_ADDRESS());
-    
-    assert(ERC20ABIDispatcher { contract_address: vault.contract_address }.balance_of(DUMMY_ADDRESS()) > 0, 'Deposit failed');
+
+    assert(
+        ERC20ABIDispatcher { contract_address: vault.contract_address }
+            .balance_of(DUMMY_ADDRESS()) > 0,
+        'Deposit failed',
+    );
 }
 
 #[test]
-#[should_panic(expected: 'ERC4626: exceeds max deposit',)]
+#[should_panic(expected: 'ERC4626: exceeds max deposit')]
 fn test_deposit_exceeds_limit() {
     let (underlying, vault, _) = set_up();
     let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
-    
+
     let deposit_limit = Vault::WAD;
     cheat_caller_address_once(vault.contract_address, OWNER());
     vault.set_deposit_limit(deposit_limit);
-    
+
     cheat_caller_address_once(underlying, OWNER());
     ERC20ABIDispatcher { contract_address: underlying }.transfer(DUMMY_ADDRESS(), Vault::WAD * 2);
     cheat_caller_address_once(underlying, DUMMY_ADDRESS());
-    ERC20ABIDispatcher { contract_address: underlying }.approve(vault.contract_address, Vault::WAD * 2);
-    
+    ERC20ABIDispatcher { contract_address: underlying }
+        .approve(vault.contract_address, Vault::WAD * 2);
+
     cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
     erc4626_dispatcher.deposit(deposit_limit + 1, DUMMY_ADDRESS());
+}
+
+#[test]
+#[should_panic(expected: "Caller is not the vault allocator")]
+fn test_bring_liquidity_unauthorized() {
+    let (_underlying, vault, _) = set_up();
+
+    // Try to call bring_liquidity from unauthorized address
+    cheat_caller_address_once(vault.contract_address, DUMMY_ADDRESS());
+    vault.bring_liquidity(1000);
 }
