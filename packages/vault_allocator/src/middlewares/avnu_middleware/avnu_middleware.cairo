@@ -48,7 +48,8 @@ pub mod AvnuMiddleware {
         slippage: u16,
         period: u64,
         allowed_calls_per_period: u64,
-        call_count: Map<u64, u64>,
+        current_window_id: u64,
+        window_call_count: u64,
     }
 
     #[event]
@@ -197,34 +198,42 @@ pub mod AvnuMiddleware {
             if (caller != self.vault_allocator.read()) {
                 Errors::caller_not_vault_allocator();
             }
+
+            let period = self.period.read();
             let ts: u64 = get_block_timestamp();
-            let slot = ts % self.period.read();
-            let current = self.call_count.read(slot);
-            let next = current + 1;
-            let allowed_calls_per_period = self.allowed_calls_per_period.read();
-            if (next > allowed_calls_per_period) {
-                Errors::rate_limit_exceeded(next, allowed_calls_per_period);
+            let window_id: u64 = ts / period;
+
+            if (window_id != self.current_window_id.read()) {
+                self.current_window_id.write(window_id);
+                self.window_call_count.write(0);
             }
-            self.call_count.write(slot, next);
+
+            let current = self.window_call_count.read();
+            let next = current + 1;
+            let allowed = self.allowed_calls_per_period.read();
+
+            if (next > allowed) {
+                Errors::rate_limit_exceeded(next, allowed);
+            }
+            self.window_call_count.write(next);
         }
 
-        fn _set_config(
-            ref self: ContractState, slippage: u16, period: u64, allowed_calls_per_period: u64,
-        ) {
+        fn _set_config(ref self: ContractState, slippage: u16, period: u64, allowed: u64) {
             if (slippage >= BPS_SCALE) {
                 Errors::slippage_exceeds_max(slippage);
             }
-
-            self.slippage.write(slippage);
-
             if (period.is_zero()) {
                 Errors::period_zero();
             }
-            self.period.write(period);
-            if (allowed_calls_per_period.is_zero()) {
+            if (allowed.is_zero()) {
                 Errors::allowed_calls_per_period_zero();
             }
-            self.allowed_calls_per_period.write(allowed_calls_per_period);
+
+            self.slippage.write(slippage);
+            self.period.write(period);
+            self.allowed_calls_per_period.write(allowed);
+            self.current_window_id.write(0);
+            self.window_call_count.write(0);
         }
     }
 }
