@@ -34,10 +34,11 @@ async function main() {
     // const gas = await acc.estimateInvokeFee([reportCall, manageCall])
     // console.log(gas)
 
+    
   
-    console.log(`AUM: ${JSON.stringify(await vaultStrategy.getAUM())}`);
+    // console.log(`AUM: ${JSON.stringify(await vaultStrategy.getAUM())}`);
     // console.log(`Positions: ${JSON.stringify(await vaultStrategy.getVaultPositions())}`);
-    console.log(`Net APY: ${JSON.stringify(await vaultStrategy.netAPY())}`);
+    // console.log(`Net APY: ${JSON.stringify(await vaultStrategy.netAPY())}`);
     // console.log(`Health factors: ${JSON.stringify(await vaultStrategy.getVesuHealthFactors())}`)
 }
 

@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { ContractAddr, Deployer, FlashloanCallParams, getMainnetConfig, Global, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalStrategies, UniversalStrategy, UniversalStrategySettings, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
-import { byteArray, CallData, Contract, hash, num, shortString, uint256 } from 'starknet';
+import { ContractAddr, Deployer, getMainnetConfig, Global, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalStrategies, UniversalStrategy, UniversalStrategySettings, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
+import { byteArray, CallData, Contract, hash, num, provider, shortString, uint256 } from 'starknet';
 import * as CommonSettings from './config.json';
 import { StandardMerkleTree, LeafData } from './merkle';
 
@@ -14,7 +14,7 @@ interface VaultContracts {
 
 console.log('url', process.env.RPC_URL);
 const config = getMainnetConfig(process.env.RPC_URL!, 'latest');
-const acc = Deployer.getAccount('strkfarmadmin', config);
+const acc = Deployer.getAccount('strkfarmadmin', config, process.env.ACCOUNT_SECURE_PASSWORD!, process.env.ACCOUNT_FILE || 'accounts.json');
 const OWNER = ContractAddr.from(acc.address);
 const FEE_RECIPIENT = ContractAddr.from(acc.address);
 const VAULT_PACKAGE = 'vault';
@@ -111,13 +111,13 @@ async function configureSettings(vaultContracts: VaultContracts) {
     const provider = config.provider;
 
     const vaultCls = await provider.getClassAt(vaultContracts.vault.toString());
-    const vaultContract = new Contract(vaultCls.abi, vaultContracts.vault.toString(), provider as any);
+    const vaultContract = new Contract({abi: vaultCls.abi, address: vaultContracts.vault.toString(), providerOrAccount: provider as any});
 
     const setRedeemContractCall = vaultContract.populate('register_redeem_request', [vaultContracts.redeemRequest.address.toString()])
     const setVaultAllocatorCall = vaultContract.populate('register_vault_allocator', [vaultContracts.vaultAllocator.address.toString()])
 
     const vaultAllocatorCls = await provider.getClassAt(vaultContracts.vaultAllocator.toString());
-    const vaultAllocatorContract = new Contract(vaultAllocatorCls.abi, vaultContracts.vaultAllocator.toString(), provider as any);
+    const vaultAllocatorContract = new Contract({abi: vaultAllocatorCls.abi, address: vaultContracts.vaultAllocator.toString(), providerOrAccount: provider as any});
 
     const setManagerCall = vaultAllocatorContract.populate('set_manager', [vaultContracts.manager.address.toString()]);
 
@@ -161,7 +161,7 @@ async function upgrade(
     const cls = await Deployer.myDeclare(contractName, packageName, config, acc);
 
     const contractCls = await config.provider.getClassAt(contractAddr);
-    const contract = new Contract(contractCls.abi, contractAddr, config.provider as any);
+    const contract = new Contract({abi: contractCls.abi, address: contractAddr, providerOrAccount: config.provider as any});
 
     const call = contract.populate('upgrade', [cls.class_hash]);
     await Deployer.executeTransactions([call], acc, config.provider, 'Upgrade contract');
@@ -207,7 +207,7 @@ function getMaxDelta(expectedAPYPercent: number, report_delay_seconds: number, a
 async function grantRole(vault: UniversalStrategy<UniversalStrategySettings>, role: string, account: string) {
     const provider = config.provider;
     const cls = await provider.getClassAt(vault.address.toString());
-    const contract = new Contract(cls.abi, vault.address.toString(), provider as any);
+    const contract = new Contract({abi: cls.abi, address: vault.address.toString(), providerOrAccount: provider as any});
     const grantRoleCall = contract.populate('grant_role', [role, account]);
     await Deployer.executeTransactions([grantRoleCall], acc, provider, 'Grant role');
 }
@@ -217,7 +217,7 @@ async function setMaxDelta(vault: UniversalStrategy<UniversalStrategySettings>, 
     console.log('getting cls');
     const cls = await provider.getClassAt(vault.address.toString());
     console.log('getting cls2', cls.abi.length);
-    const contract = new Contract(cls.abi, vault.address.toString(), provider as any);
+    const contract = new Contract({abi: cls.abi, address: vault.address.toString(), providerOrAccount: provider as any});
     const setMaxDeltaCall = contract.populate('set_max_delta', [uint256.bnToUint256(Math.round(maxDelta * 1e18))]);
     await Deployer.executeTransactions([setMaxDeltaCall], acc, provider, 'Set max delta');
 }
@@ -226,7 +226,7 @@ async function test() {
     const addr = '0x043e4f09c32d13d43a880e85f69f7de93ceda62d6cf2581a582c6db635548fdc';
     const provider = config.provider;
     const cls = await provider.getClassAt(addr);
-    const contract = new Contract(cls.abi, addr, provider as any);
+    const contract = new Contract({abi: cls.abi, address: addr, providerOrAccount: provider as any});
 
     const result = await contract.call('')
 }
@@ -262,7 +262,7 @@ async function deployAvnuMiddleware() {
 async function configurePriceRouter() {
     const PRICE_ROUTER = '0x05e83Fa38D791d2dba8E6f487758A9687FfEe191A6Cf8a6c5761ab0a110DB837'
     const cls = await config.provider.getClassAt(PRICE_ROUTER);
-    const contract = new Contract(cls.abi, PRICE_ROUTER, config.provider as any);
+    const contract = new Contract({abi: cls.abi, address: PRICE_ROUTER, providerOrAccount: config.provider as any});
 
     // ETH/WBTC/USDC/USDT/STRK
     const assetIdMap = [{
@@ -284,6 +284,44 @@ async function configurePriceRouter() {
     const calls = assetIdMap.map(m => contract.populate('set_asset_to_id', [m.asset.toString(), m.id]));
     await Deployer.executeTransactions(calls, acc, config.provider, 'Configure Price Router');
 }
+
+// fn set_fees_config(
+//         ref self: TContractState,
+//         fees_recipient: ContractAddress,
+//         redeem_fees: u256,
+//         management_fees: u256,
+//         performance_fees: u256,
+//     );
+async function setFeesConfig(strategy: UniversalStrategy<UniversalStrategySettings>) {
+  const provider = config.provider;
+  const cls = await provider.getClassAt(strategy.address.address.toString());
+  const contract = new Contract({abi: cls.abi, address: strategy.address.toString(), providerOrAccount: provider as any});
+  console.log(`got cls`)
+  const feeReceiver = '0x06419f7DeA356b74bC1443bd1600AB3831b7808D1EF897789FacFAd11a172Da7';
+  const setFeesCall = contract.populate('set_fees_config', [
+    feeReceiver,
+    uint256.bnToUint256(0),
+    uint256.bnToUint256(0),
+    uint256.bnToUint256(1e17), // 10%
+  ]);
+  await Deployer.executeTransactions([setFeesCall], acc, provider, 'Set fees config');
+}
+
+async function pause(strategy: UniversalStrategy<UniversalStrategySettings>) {
+  const provider = config.provider;
+  const cls = await provider.getClassAt(strategy.address.address.toString());
+  const contract = new Contract({abi: cls.abi, address: strategy.address.toString(), providerOrAccount: provider as any});
+  const pauseCall = contract.populate('pause');
+  await Deployer.executeTransactions([pauseCall], acc, provider, 'Pause');
+}
+
+async function unpause(strategy: UniversalStrategy<UniversalStrategySettings>) {
+    const provider = config.provider;
+    const cls = await provider.getClassAt(strategy.address.address.toString());
+    const contract = new Contract({abi: cls.abi, address: strategy.address.toString(), providerOrAccount: provider as any});
+    const pauseCall = contract.populate('unpause');
+    await Deployer.executeTransactions([pauseCall], acc, provider, 'Pause');
+  }
 
 if (require.main === module) {
     // deployStrategy();
@@ -307,8 +345,11 @@ if (require.main === module) {
             const u = UniversalStrategies[i];
             const strategy = new UniversalStrategy(config, pricer, u);
             // await setManagerRoot(strategy, ContractAddr.from(RELAYER));
-            await setMaxDelta(strategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 24));
+            // await setMaxDelta(strategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 24));
             // await grantRole(u, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
+            // await setFeesConfig(strategy);
+            // await pause(strategy);
+            await unpause(strategy);
         }
     }
     setConfig();
