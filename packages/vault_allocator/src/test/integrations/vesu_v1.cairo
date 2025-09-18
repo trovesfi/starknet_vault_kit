@@ -9,16 +9,18 @@ use snforge_std::{map_entry_address, store};
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::{
     Amount, AmountDenomination, AmountType,
 };
-use vault_allocator::integration_interfaces::vesu::{
-    IDefaultExtensionPOV2Dispatcher, IDefaultExtensionPOV2DispatcherTrait, ISingletonV2Dispatcher,
-    ISingletonV2DispatcherTrait,
-};
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
-use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, VESU_SINGLETON, wstETH};
+use vault_allocator::merkle_tree::base::{
+    ManageLeaf, _get_proofs_using_tree, _pad_leafs_to_power_of_two, generate_merkle_tree,
+};
+use vault_allocator::merkle_tree::integrations::erc4626::_add_erc4626_leafs;
+use vault_allocator::merkle_tree::integrations::vesu_v1::{VesuV1Config, _add_vesu_v1_leafs};
+use vault_allocator::merkle_tree::registery::{
+    ETH, GENESIS_POOL_ID, VESU_GENESIS_POOL_V_TOKEN_WSTETH, VESU_SINGLETON, wstETH,
+};
 use vault_allocator::test::utils::{
-    ManageLeaf, OWNER, STRATEGIST, WAD, _add_vesu_leafs, _get_proofs_using_tree,
-    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_manager,
-    deploy_simple_decoder_and_sanitizer, deploy_vault_allocator, generate_merkle_tree,
+    OWNER, STRATEGIST, WAD, cheat_caller_address_once, deploy_manager,
+    deploy_simple_decoder_and_sanitizer, deploy_vault_allocator,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 
@@ -26,20 +28,18 @@ use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 #[test]
 fn test_manage_vault_with_merkle_verification_earn_mode() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
 
     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
     let mut leaf_index: u256 = 0;
 
-    _add_vesu_leafs(
+    _add_erc4626_leafs(
         ref leafs,
         ref leaf_index,
         vault_allocator.contract_address,
         simple_decoder_and_sanitizer,
-        GENESIS_POOL_ID,
-        array![wstETH()].span(),
-        array![array![ETH()].span()].span(),
+        VESU_GENESIS_POOL_V_TOKEN_WSTETH(),
     );
 
     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
@@ -78,11 +78,7 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
 
     let mut array_of_targets = ArrayTrait::new();
     array_of_targets.append(wstETH());
-    let v_token = IDefaultExtensionPOV2Dispatcher {
-        contract_address: ISingletonV2Dispatcher { contract_address: VESU_SINGLETON() }
-            .extension(GENESIS_POOL_ID),
-    }
-        .v_token_for_collateral_asset(GENESIS_POOL_ID, wstETH());
+    let v_token = VESU_GENESIS_POOL_V_TOKEN_WSTETH();
     array_of_targets.append(v_token);
 
     let mut array_of_selectors = ArrayTrait::new();
@@ -277,20 +273,25 @@ fn test_manage_vault_with_merkle_verification_earn_mode() {
 #[test]
 fn test_manage_vault_with_merkle_verification_debt_mode() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
 
     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
     let mut leaf_index: u256 = 0;
 
-    _add_vesu_leafs(
+    _add_vesu_v1_leafs(
         ref leafs,
         ref leaf_index,
         vault_allocator.contract_address,
         simple_decoder_and_sanitizer,
-        GENESIS_POOL_ID,
-        array![wstETH()].span(),
-        array![array![ETH()].span()].span(),
+        array![
+            VesuV1Config {
+                pool_id: GENESIS_POOL_ID,
+                collateral_asset: wstETH(),
+                debt_assets: array![ETH()].span(),
+            },
+        ]
+            .span(),
     );
 
     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
@@ -322,10 +323,7 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     // first scenario is depositing wsteth to vesu genesis pool, transfer the position and borrow
     // ETH
     let deposit_amount: u256 = WAD;
-    let extension = ISingletonV2Dispatcher { contract_address: VESU_SINGLETON() }
-        .extension(GENESIS_POOL_ID);
-    let v_token = IDefaultExtensionPOV2Dispatcher { contract_address: extension }
-        .v_token_for_collateral_asset(GENESIS_POOL_ID, wstETH());
+
     let debt_amount: u256 = WAD / 40; // 2.5% of the deposit
 
     let mut array_of_decoders_and_sanitizers = ArrayTrait::new();
@@ -385,8 +383,8 @@ fn test_manage_vault_with_merkle_verification_debt_mode() {
     array_of_calldatas.append(array_of_calldata_modify_position.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(leafs.at(5).clone());
-    manage_leafs.append(leafs.at(6).clone());
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
     cheat_caller_address_once(manager.contract_address, STRATEGIST());

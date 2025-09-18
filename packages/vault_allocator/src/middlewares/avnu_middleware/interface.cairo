@@ -9,11 +9,9 @@ use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;
 pub trait IAvnuMiddleware<T> {
     fn avnu_router(self: @T) -> ContractAddress;
     fn price_router(self: @T) -> ContractAddress;
-    fn slippage_tolerance_bps(self: @T) -> u256;
-
-    fn set_config(ref self: T, period: u64, allowed_calls_per_period: u64);
-
-
+    fn vault_allocator(self: @T) -> ContractAddress;
+    fn config(self: @T) -> (u16, u64, u64);
+    fn set_config(ref self: T, slippage: u16, period: u64, allowed_calls_per_period: u64);
     fn multi_route_swap(
         ref self: T,
         sell_token_address: ContractAddress,
@@ -26,5 +24,4 @@ pub trait IAvnuMiddleware<T> {
         integrator_fee_recipient: ContractAddress,
         routes: Array<Route>,
     ) -> u256;
-    fn set_slippage_tolerance_bps(ref self: T, new_slippage_bps: u256);
 }

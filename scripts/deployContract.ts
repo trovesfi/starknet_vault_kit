@@ -1,9 +1,4 @@
-import {
-  Account,
-  RpcProvider,
-  CallData,
-  CairoUint256,
-} from "starknet";
+import { Account, RpcProvider, CallData, CairoUint256 } from "starknet";
 import dotenv from "dotenv";
 import { readConfigs } from "./configs/utils";
 import { getNetworkEnv } from "./utils";
@@ -79,9 +74,7 @@ export async function deploySimpleDecoderAndSanitizer(envNetwork: string) {
   return await deployContract(envNetwork, "SimpleDecoderAndSanitizer", []);
 }
 
-export async function deployPriceRouter(
-  envNetwork: string
-) {
+export async function deployPriceRouter(envNetwork: string) {
   const config = readConfigs();
   const networkConfig = config[envNetwork];
   if (!networkConfig) {
@@ -137,6 +130,17 @@ export async function deployAvnuMiddleware(
   ]);
 }
 
+export async function deployAumProvider4626(
+  envNetwork: string,
+  vaultAddress: string,
+  strategy4626Address: string
+) {
+  return await deployContract(envNetwork, "AumProvider4626", [
+    vaultAddress,
+    strategy4626Address,
+  ]);
+}
+
 function validateSlippageTolerancePercentage(slippage: string): number {
   const num = parseFloat(slippage);
   if (isNaN(num) || num < 0 || num > 100) {
@@ -165,6 +169,15 @@ function parseArguments(contractName: string, args: string[]) {
         slippageToleranceBps: validateSlippageTolerancePercentage(args[0]),
       };
 
+    case "AumProvider4626":
+      if (args.length < 2) {
+        throw new Error("AumProvider4626 requires: <vault_address>");
+      }
+      return {
+        vaultAddress: args[0],
+        strategy4626Address: args[1],
+      };
+
     default:
       throw new Error(`Unknown contract: ${contractName}`);
   }
@@ -183,14 +196,16 @@ async function main() {
       console.log("    Usage: --contract SimpleDecoderAndSanitizer");
       console.log("  - PriceRouter");
       console.log("    Usage: --contract PriceRouter");
-      console.log(
-        "  - AvnuMiddleware <slippage_tolerance_percentage>"
-      );
+      console.log("  - AvnuMiddleware <slippage_tolerance_percentage>");
       console.log(
         "    Usage: --contract AvnuMiddleware <slippage_tolerance_percentage>"
       );
       console.log(
         "    Note: slippage_tolerance_percentage should be between 0-100% (e.g., 2.5 for 2.5%)"
+      );
+      console.log("  - AumProvider4626 <vault_address> <strategy4626_address>");
+      console.log(
+        "    Usage: --contract AumProvider4626 <vault_address> <strategy4626_address>"
       );
       return;
     }
@@ -218,6 +233,14 @@ async function main() {
         deployedAddress = await deployAvnuMiddleware(
           envNetwork,
           parsedArgs.slippageToleranceBps as number
+        );
+        break;
+
+      case "AumProvider4626":
+        deployedAddress = await deployAumProvider4626(
+          envNetwork,
+          parsedArgs.vaultAddress as string,
+          parsedArgs.strategy4626Address as string
         );
         break;
 

@@ -7,6 +7,7 @@ import { getNetworkEnv } from "./utils";
 dotenv.config({ path: __dirname + "/../.env" });
 
 const provider = new RpcProvider({ nodeUrl: process.env.RPC });
+
 const owner = new Account(
   provider,
   process.env.ACCOUNT_ADDRESS as string,
@@ -91,6 +92,16 @@ async function main() {
         "vault_allocator",
         "SimpleDecoderAndSanitizer"
       );
+      break;
+    case "VesuV2SpecificDecoderAndSanitizer":
+      await declareContract(
+        envNetwork,
+        "vault_allocator",
+        "VesuV2SpecificDecoderAndSanitizer"
+      );
+      break;
+    case "AumProvider4626":
+      await declareContract(envNetwork, "vault", "AumProvider4626");
       break;
     default:
       throw new Error("Error: Unknown contract");
