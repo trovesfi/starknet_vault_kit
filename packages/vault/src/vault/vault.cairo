@@ -19,18 +19,25 @@
 
 #[starknet::contract]
 pub mod Vault {
-    use core::num::traits::Zero;
+    use core::num::traits::{Zero, Bounded};
     use openzeppelin::access::accesscontrol::AccessControlComponent;
+    use openzeppelin::interfaces::erc20::{
+        ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
+    };
+    use openzeppelin::interfaces::erc721::{
+        ERC721ABIDispatcher, ERC721ABIDispatcherTrait, IERC721EnumerableDispatcher,
+        IERC721EnumerableDispatcherTrait,
+    };
+    use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::security::pausable::PausableComponent;
-    use openzeppelin::token::erc20::interface::{
-        ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
+    use openzeppelin::token::erc20::extensions::erc4626::ERC4626Component::Fee;
+    use openzeppelin::token::erc20::extensions::erc4626::{
+        DefaultConfig, ERC4626Component, ERC4626DefaultNoFees,
     };
     use openzeppelin::token::erc20::{
         DefaultConfig as ERC20DefaultConfig, ERC20Component, ERC20HooksEmptyImpl,
     };
-    use openzeppelin::token::erc721::interface::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
-    use openzeppelin::upgrades::interface::IUpgradeable;
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use openzeppelin::utils::math;
     use openzeppelin::utils::math::Rounding;
@@ -39,9 +46,6 @@ pub mod Vault {
         StoragePointerWriteAccess,
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address};
-    use vault::oz_4626::{
-        DefaultConfig, ERC4626Component, ERC4626DefaultLimits, ERC4626DefaultNoFees,
-    };
     use vault::redeem_request::interface::{
         IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait, RedeemRequestInfo,
     };
@@ -82,6 +86,72 @@ pub mod Vault {
     #[abi(embed_v0)]
     impl ERC4626Impl = ERC4626Component::ERC4626Impl<ContractState>;
     impl ERC4626InternalImpl = ERC4626Component::InternalImpl<ContractState>;
+
+    // --- Custom ERC4626 Limits Implementation ---
+    // Custom implementation of deposit/withdraw limits
+    // Uses max u256 as sentinel value for "unlimited"
+    impl ERC4626LimitConfigImpl of ERC4626Component::LimitConfigTrait<ContractState> {
+        /// The max deposit allowed based on cap.
+        /// Returns remaining capacity: cap - total_assets
+        /// Returns None for no limit (when limit equals max u256)
+        fn deposit_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
+        ) -> Option<u256> {
+            let contract_state = self.get_contract();
+            let limit = contract_state.deposit_limit.read();
+            if limit == Bounded::MAX {
+                Option::None
+            } else {
+                let total_assets = self.get_total_assets();
+                if total_assets >= limit {
+                    Option::Some(0) 
+                } else {
+                    Option::Some(limit - total_assets)
+                }
+            }
+        }
+
+        /// The max mint allowed based on cap.
+        /// Returns shares equivalent of remaining deposit capacity
+        /// Returns None for no limit (when limit equals max u256)
+        fn mint_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
+        ) -> Option<u256> {
+            let contract_state = self.get_contract();
+            let limit = contract_state.mint_limit.read();
+            if limit == Bounded::MAX {
+                Option::None
+            } else {
+                let deposit_limit_opt = self.deposit_limit(receiver);
+                match deposit_limit_opt {
+                    Option::None => Option::None,
+                    Option::Some(deposit_remaining) => {
+                        if deposit_remaining == 0 {
+                            Option::Some(0)
+                        } else {
+                            let shares = self._convert_to_shares(deposit_remaining, Rounding::Floor);
+                            Option::Some(shares)
+                        }
+                    }
+                }
+            }
+        }
+
+        /// The max withdraw allowed.
+        /// Not implemented - withdrawals are disabled in this vault
+        fn withdraw_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
+        ) -> Option<u256> {
+            Option::None
+        }
+
+        /// The max redeem allowed.
+        fn redeem_limit(
+            self: @ERC4626Component::ComponentState<ContractState>, owner: ContractAddress,
+        ) -> Option<u256> {
+            Option::None
+        }
+    }
 
     // --- ERC20 Implementation ---
     // Share token functionality with standard and camelCase interfaces
@@ -141,7 +211,11 @@ pub mod Vault {
         management_fees: u256, // Annual management fee rate (in WAD)
         performance_fees: u256, // Performance fee on profits (in WAD)
         // --- Redemption System ---
-        redeem_request: IRedeemRequestDispatcher // NFT contract for tracking redemption requests
+        redeem_request: IRedeemRequestDispatcher, // NFT contract for tracking redemption requests
+        // --- ERC4626 Limits ---
+        // Note: max u256 means unlimited, any other value (including 0) sets a specific limit
+        deposit_limit: u256, // Maximum deposit amount 
+        mint_limit: u256, // Maximum mint amount 
     }
 
     // --- Events ---
@@ -158,7 +232,8 @@ pub mod Vault {
         // Vault-specific events
         RedeemRequested: RedeemRequested, // Emitted when a redemption is requested
         RedeemClaimed: RedeemClaimed, // Emitted when a redemption is claimed
-        Report: Report // Emitted when oracle reports new AUM
+        Report: Report, // Emitted when oracle reports new AUM
+        BringLiquidity: BringLiquidity // Emitted when liquidity is brought back from allocators
     }
 
     /// Event emitted when a user requests a redemption
@@ -191,6 +266,16 @@ pub mod Vault {
         pub total_assets: u256, // Total assets under management
         pub management_fee_shares: u256, // Management fee shares minted
         pub performance_fee_shares: u256 // Performance fee shares minted
+    }
+
+    /// Event emitted when liquidity is brought back from allocators
+    #[derive(Drop, starknet::Event)]
+    pub struct BringLiquidity {
+        pub caller: ContractAddress, // Address that initiated the liquidity transfer
+        pub amount: u256, // Amount of assets brought back to vault
+        pub new_buffer: u256, // New buffer amount after the transfer
+        pub new_aum: u256, // New AUM amount after the transfer
+        pub epoch: u256 // Epoch when the liquidity was brought back
     }
 
     /// Initialize the vault with configuration parameters
@@ -238,6 +323,23 @@ pub mod Vault {
 
         // Initialize timestamp for fee calculations
         self.last_report_timestamp.write(get_block_timestamp());
+
+        // Initialize limits to max u256 (unlimited)
+        // max u256 is used as sentinel value for "no limit"
+        let max_limit: u256 = Bounded::MAX;
+        self.deposit_limit.write(max_limit);
+        self.mint_limit.write(max_limit);
+        self
+            .emit(
+                Report {
+                    new_epoch: 0,
+                    new_handled_epoch_len: 0,
+                    total_supply: 0,
+                    total_assets: 0,
+                    management_fee_shares: 0,
+                    performance_fee_shares: 0,
+                },
+            );
     }
 
     // --- Contract Upgradeability ---
@@ -308,30 +410,55 @@ pub mod Vault {
         /// Hook executed before burning shares and transferring assets during withdrawal
         /// Direct withdrawals are not supported - users must use epoched redemption system
         fn before_withdraw(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            owner: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {
             Errors::not_implemented(); // Withdrawals disabled - use request_redeem instead
         }
 
+
         /// Hook executed after burning shares and transferring assets during withdrawal
         /// No additional logic needed since withdrawals are disabled
         fn after_withdraw(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            owner: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {}
+
 
         /// Hook executed before transferring assets and minting shares during deposit
         /// Ensures vault is not paused before accepting deposits
         fn before_deposit(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {
             let mut contract_state = self.get_contract_mut();
             contract_state.pausable.assert_not_paused(); // Prevent deposits when paused
         }
 
+
         /// Hook executed after transferring assets and minting shares during deposit
         /// Updates buffer to track assets available for immediate use
         fn after_deposit(
-            ref self: ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
+            ref self: ERC4626Component::ComponentState<ContractState>,
+            caller: ContractAddress,
+            receiver: ContractAddress,
+            assets: u256,
+            shares: u256,
+            fee: Option<Fee>,
         ) {
             let mut contract_state = self.get_contract_mut();
             contract_state.buffer.write(contract_state.buffer.read() + assets);
@@ -698,7 +825,7 @@ pub mod Vault {
             let management_fee_shares = math::u256_mul_div(
                 management_fee_assets,
                 total_supply + 1,
-                (total_assets - management_fee_assets) + 1,
+                (total_assets - (management_fee_assets + performance_fee_assets)) + 1,
                 Rounding::Floor,
             );
             if (management_fee_shares.is_non_zero()) {
@@ -737,10 +864,24 @@ pub mod Vault {
         fn bring_liquidity(
             ref self: ContractState, amount: u256,
         ) { // Amount of assets to bring back
+            let caller = get_caller_address();
+            // Only the registered vault allocator can bring liquidity
+            if (caller != self.vault_allocator.read()) {
+                Errors::caller_is_not_vault_allocator();
+            }
             ERC20ABIDispatcher { contract_address: self.erc4626.asset() }
-                .transfer_from(get_caller_address(), starknet::get_contract_address(), amount);
-            self.buffer.write(self.buffer.read() + amount); // Increase buffer
-            self.aum.write(self.aum.read() - amount); // Decrease deployed AUM
+                .transfer_from(caller, starknet::get_contract_address(), amount);
+            let new_buffer = self.buffer.read() + amount; // Calculate new buffer
+            let new_aum = self.aum.read() - amount; // Calculate new AUM
+            self.buffer.write(new_buffer); // Increase buffer
+            self.aum.write(new_aum); // Decrease deployed AUM
+
+            self
+                .emit(
+                    BringLiquidity {
+                        caller, amount, new_buffer, new_aum, epoch: self.epoch.read(),
+                    },
+                );
         }
 
         // --- State Getter Functions ---
@@ -820,6 +961,60 @@ pub mod Vault {
         /// Get maximum allowed AUM change per report (in WAD format)
         fn max_delta(self: @ContractState) -> u256 {
             self.max_delta.read()
+        }
+
+        // --- Limit Configuration Functions ---
+
+        /// Set the deposit limit (max u256 for unlimited, any other value including 0 for specific limit)
+        /// Only callable by owner
+        fn set_deposit_limit(ref self: ContractState, limit: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.deposit_limit.write(limit);
+        }
+
+        /// Set the mint limit (max u256 for unlimited, any other value including 0 for specific limit)
+        /// Only callable by owner
+        fn set_mint_limit(ref self: ContractState, limit: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.mint_limit.write(limit);
+        }
+
+        /// Get the current deposit limit (max u256 means unlimited)
+        fn get_deposit_limit(self: @ContractState) -> u256 {
+            self.deposit_limit.read()
+        }
+
+        /// Get the current mint limit (max u256 means unlimited)
+        fn get_mint_limit(self: @ContractState) -> u256 {
+            self.mint_limit.read()
+        }
+
+        fn due_assets_from_owner(self: @ContractState, owner: ContractAddress) -> u256 {
+            let balance = ERC721ABIDispatcher {
+                contract_address: self.redeem_request.read().contract_address,
+            }
+                .balance_of(owner);
+            let mut total_due_assets = 0;
+            for i in 0..balance {
+                total_due_assets += self
+                    .due_assets_from_id(
+                        IERC721EnumerableDispatcher {
+                            contract_address: self.redeem_request.read().contract_address,
+                        }
+                            .token_of_owner_by_index(owner, i),
+                    );
+            }
+            total_due_assets
+        }
+
+
+        fn due_assets_from_id(self: @ContractState, id: u256) -> u256 {
+            let redeem_request_info = self.redeem_request.read().id_to_info(id);
+            let redeem_request_nominal = redeem_request_info
+                .nominal; // Original asset amount requested
+            let redeem_assets = self.redeem_assets.read(redeem_request_info.epoch);
+            let redeem_nominal = self.redeem_nominal.read(redeem_request_info.epoch);
+            (redeem_request_nominal * redeem_assets) / redeem_nominal
         }
     }
 

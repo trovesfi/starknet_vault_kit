@@ -2,13 +2,12 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
-use openzeppelin::access::accesscontrol::interface::{
+use openzeppelin::interfaces::accesscontrol::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
-use openzeppelin::token::erc721::interface::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
-use openzeppelin::upgrades::interface::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
-use snforge_std::{EventSpyAssertionsTrait, spy_events};
-use starknet::{ContractAddress, contract_address_const, get_caller_address};
+use openzeppelin::interfaces::erc721::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
+use openzeppelin::interfaces::upgrades::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
+use starknet::ContractAddress;
 use vault::redeem_request::interface::{
     IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait, RedeemRequestInfo,
 };
@@ -63,7 +62,7 @@ fn test_id_to_info_nonexistent() {
 #[test]
 #[should_panic(expected: "Caller is not vault")]
 fn test_mint_not_vault() {
-    let (vault_address, redeem_request) = set_up();
+    let (_, redeem_request) = set_up();
     let redeem_info = RedeemRequestInfo { epoch: 1, nominal: 100 };
     redeem_request.mint(DUMMY_ADDRESS(), redeem_info);
 }
@@ -212,7 +211,7 @@ fn test_burn_one_of_multiple() {
 #[test]
 #[should_panic(expected: "Caller is not vault owner")]
 fn test_upgrade_not_vault_owner() {
-    let (vault_address, redeem_request) = set_up();
+    let (_, redeem_request) = set_up();
     let (_, counter_class_hash) = deploy_counter();
 
     IUpgradeableDispatcher { contract_address: redeem_request.contract_address }
@@ -221,7 +220,7 @@ fn test_upgrade_not_vault_owner() {
 
 #[test]
 fn test_upgrade_success() {
-    let (vault_address, redeem_request) = set_up();
+    let (_, redeem_request) = set_up();
     let (_, counter_class_hash) = deploy_counter();
 
     cheat_caller_address_once(redeem_request.contract_address, OWNER());

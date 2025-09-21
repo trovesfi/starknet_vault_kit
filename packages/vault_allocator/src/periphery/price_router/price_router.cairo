@@ -4,16 +4,17 @@
 
 #[starknet::contract]
 pub mod PriceRouter {
-    use alexandria_math::ed25519::c;
     use core::num::traits::{Pow, Zero};
     use openzeppelin::access::ownable::OwnableComponent;
-    use openzeppelin::token::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
-    use pragma_lib::abi::{IPragmaABIDispatcher, IPragmaABIDispatcherTrait};
-    use pragma_lib::types::{AggregationMode, DataType, PragmaPricesResponse};
+    use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+    use openzeppelin::utils::math;
     use starknet::ContractAddress;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess,
+    };
+    use vault_allocator::integration_interfaces::pragma::{
+        DataType, IPragmaABIDispatcher, IPragmaABIDispatcherTrait, PragmaPricesResponse,
     };
     use vault_allocator::periphery::price_router::errors::Errors;
     use vault_allocator::periphery::price_router::interface::IPriceRouter;
@@ -89,7 +90,7 @@ pub mod PriceRouter {
 
             let num: u256 = amount * base_price * scale_quote;
             let den: u256 = quote_price * scale_base;
-            num / den
+            math::u256_mul_div(num, 1, den, math::Rounding::Ceil)
         }
         fn asset_to_id(self: @ContractState, asset: ContractAddress) -> felt252 {
             self.asset_to_id.read(asset)

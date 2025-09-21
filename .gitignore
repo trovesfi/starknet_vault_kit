@@ -1,4 +1,8 @@
 target
 .snfoundry_cache
+
+# Deployment files (user-specific)
+scripts/deployments.json
+
 .env
 node_modules

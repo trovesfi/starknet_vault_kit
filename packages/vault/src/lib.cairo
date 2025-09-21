@@ -8,8 +8,17 @@ pub mod vault {
     pub mod vault;
 }
 
-// waiting for openzeppelin to release vault with external assets
-pub mod oz_4626;
+pub mod aum_provider {
+    pub mod base_aum_provider;
+    pub mod errors;
+    pub mod interface;
+    pub mod aum_provider_4626 {
+        pub mod aum_provider_4626;
+        pub mod errors;
+        pub mod interface;
+    }
+}
+
 
 pub mod redeem_request {
     pub mod errors;

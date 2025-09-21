@@ -2,8 +2,8 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
-use openzeppelin::access::ownable::interface::{IOwnableDispatcher, IOwnableDispatcherTrait};
-use openzeppelin::upgrades::interface::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
+use openzeppelin::interfaces::ownable::{IOwnableDispatcher, IOwnableDispatcherTrait};
+use openzeppelin::interfaces::upgrades::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
 use starknet::ContractAddress;
 use starknet::account::Call;
 use vault_allocator::mocks::counter::{ICounterDispatcher, ICounterDispatcherTrait};

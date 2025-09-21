@@ -4,32 +4,35 @@
 
 use alexandria_math::i257::I257Impl;
 use core::num::traits::Zero;
-use openzeppelin::token::erc20::interface::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
 use snforge_std::{map_entry_address, store};
 use starknet::ContractAddress;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
-use vault_allocator::middlewares::avnu_middleware::interface::{
-    IAvnuMiddlewareDispatcher, IAvnuMiddlewareDispatcherTrait,
+use vault_allocator::merkle_tree::base::{
+    ManageLeaf, _get_proofs_using_tree, _pad_leafs_to_power_of_two, generate_merkle_tree,
 };
-use vault_allocator::test::register::{ETH, VESU_SINGLETON, wstETH};
+use vault_allocator::merkle_tree::integrations::avnu::{AvnuConfig, _add_avnu_leafs};
+use vault_allocator::merkle_tree::registery::{ETH, wstETH};
 use vault_allocator::test::utils::{
-    ManageLeaf, OWNER, STRATEGIST, WAD, _add_avnu_leafs, _get_proofs_using_tree,
-    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_avnu_middleware, deploy_manager,
+    OWNER, STRATEGIST, WAD, cheat_caller_address_once, deploy_avnu_middleware, deploy_manager,
     deploy_price_router, deploy_simple_decoder_and_sanitizer, deploy_vault_allocator,
-    generate_merkle_tree, initialize_price_router,
+    initialize_price_router,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
+
 
 #[fork("AVNU")]
 #[test]
 fn test_manage_vault_with_merkle_verification_avnu() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
     let price_router = deploy_price_router();
     initialize_price_router(price_router);
-    let avnu_middleware = deploy_avnu_middleware(price_router);
+    let avnu_middleware = deploy_avnu_middleware(
+        vault_allocator.contract_address, price_router, 100, 100000, 1000000,
+    ); // 1% slippage
 
     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
     let mut leaf_index: u256 = 0;
@@ -40,7 +43,7 @@ fn test_manage_vault_with_merkle_verification_avnu() {
         vault_allocator.contract_address,
         simple_decoder_and_sanitizer,
         avnu_middleware,
-        array![(wstETH(), ETH())],
+        array![AvnuConfig { sell_token: wstETH(), buy_token: ETH() }].span(),
     );
 
     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
@@ -142,10 +145,6 @@ fn test_manage_vault_with_merkle_verification_avnu() {
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
     manage_leafs.append(leafs.at(0).clone());
     manage_leafs.append(leafs.at(1).clone());
-
-    cheat_caller_address_once(avnu_middleware, OWNER());
-    IAvnuMiddlewareDispatcher { contract_address: avnu_middleware }
-        .set_slippage_tolerance_bps(100); // 1% slippage
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 

@@ -1,0 +1,25 @@
+{
+  "name": "indexer",
+  "version": "0.0.1",
+  "description": "Apibara indexer for StarkNet Vault Kit events",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nest start --watch",
+    "start": "node dist/apps/indexer/src/main.js",
+    "lint": "eslint \"src/**/*.ts\" --fix"
+  },
+  "dependencies": {
+    "@apibara/protocol": "^0.4.9",
+    "@apibara/starknet": "^0.5.0",
+    "@forge/config": "workspace:*",
+    "@forge/db": "workspace:*",
+    "@forge/logger": "workspace:*",
+    "starknet": "^7.6.4",
+    "@nestjs/core": "^10.0.0",
+    "@nestjs/common": "^10.0.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.1"
+  }
+}

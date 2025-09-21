@@ -5,7 +5,7 @@
 #[starknet::contract]
 pub mod VaultAllocator {
     use openzeppelin::access::ownable::OwnableComponent;
-    use openzeppelin::upgrades::interface::IUpgradeable;
+    use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use starknet::account::Call;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
@@ -31,6 +31,16 @@ pub mod VaultAllocator {
     pub enum Event {
         OwnableEvent: OwnableComponent::Event,
         UpgradeableEvent: UpgradeableComponent::Event,
+        CallPerformed: CallPerformed,
+    }
+
+    /// Event emitted when a user requests a redemption
+    #[derive(Drop, starknet::Event)]
+    pub struct CallPerformed {
+        pub to: ContractAddress,
+        pub selector: felt252,
+        pub calldata: Span<felt252>,
+        pub result: Span<felt252>,
     }
 
 
@@ -67,7 +77,7 @@ pub mod VaultAllocator {
 
         fn manage(ref self: ContractState, call: Call) -> Span<felt252> {
             self._only_manager();
-            call_contract_syscall(call.to, call.selector, call.calldata).unwrap_syscall()
+            self.call_contract(call.to, call.selector, call.calldata)
         }
 
         fn manage_multi(ref self: ContractState, calls: Array<Call>) -> Array<Span<felt252>> {
@@ -76,11 +86,7 @@ pub mod VaultAllocator {
             let calls_len = calls.len();
             for i in 0..calls_len {
                 let call = *calls.at(i);
-                results
-                    .append(
-                        call_contract_syscall(call.to, call.selector, call.calldata)
-                            .unwrap_syscall(),
-                    );
+                results.append(self.call_contract(call.to, call.selector, call.calldata));
             }
             results
         }
@@ -93,6 +99,17 @@ pub mod VaultAllocator {
             if get_caller_address() != self.manager.read() {
                 Errors::only_manager();
             }
+        }
+
+        fn call_contract(
+            ref self: ContractState,
+            to: ContractAddress,
+            selector: felt252,
+            calldata: Span<felt252>,
+        ) -> Span<felt252> {
+            let result = call_contract_syscall(to, selector, calldata).unwrap_syscall();
+            self.emit(CallPerformed { to, selector, calldata, result });
+            result
         }
     }
 }
