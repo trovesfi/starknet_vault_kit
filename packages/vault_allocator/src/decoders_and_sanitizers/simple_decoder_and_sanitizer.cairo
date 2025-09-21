@@ -10,6 +10,7 @@ pub mod SimpleDecoderAndSanitizer {
     use vault_allocator::decoders_and_sanitizers::multiply_decoder_and_sanitizer::multiply_decoder_and_sanitizer::MultiplyDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::starknet_vault_kit_decoder_and_sanitizer::starknet_vault_kit_decoder_and_sanitizer::StarknetVaultKitDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::vesu_decoder_and_sanitizer::VesuDecoderAndSanitizerComponent;
+    use vault_allocator::decoders_and_sanitizers::defi_spring_snf_style::defi_spring_snf_style_decoder_and_sanitizer::DefiSpringSNFStyleDecoderAndSanitizerComponent;
 
     component!(
         path: BaseDecoderAndSanitizerComponent,
@@ -41,11 +42,16 @@ pub mod SimpleDecoderAndSanitizer {
     );
 
     component!(
+        path: DefiSpringSNFStyleDecoderAndSanitizerComponent,
+        storage: defi_spring_snf_style_decoder_and_sanitizer,
+        event: DefiSpringSNFStyleDecoderAndSanitizerEvent,
+    );
+
+    component!(
         path: MultiplyDecoderAndSanitizerComponent,
         storage: multiply_decoder_and_sanitizer,
         event: MultiplyDecoderAndSanitizerEvent,
     );
-
 
     #[abi(embed_v0)]
     impl BaseDecoderAndSanitizerImpl =
@@ -66,9 +72,14 @@ pub mod SimpleDecoderAndSanitizer {
         >;
 
     #[abi(embed_v0)]
+    impl DefiSpringSNFStyleDecoderAndSanitizerImpl =
+        DefiSpringSNFStyleDecoderAndSanitizerComponent::DefiSpringSNFStyleDecoderAndSanitizerImpl<
+            ContractState,
+        >;
+        
+    #[abi(embed_v0)]
     impl MultiplyDecoderAndSanitizerImpl =
         MultiplyDecoderAndSanitizerComponent::MultiplyDecoderAndSanitizerImpl<ContractState>;
-
 
     #[storage]
     pub struct Storage {
@@ -80,6 +91,8 @@ pub mod SimpleDecoderAndSanitizer {
         pub vesu_decoder_and_sanitizer: VesuDecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
         pub avnu_exchange_decoder_and_sanitizer: AvnuExchangeDecoderAndSanitizerComponent::Storage,
+        #[substorage(v0)]
+        pub defi_spring_snf_style_decoder_and_sanitizer: DefiSpringSNFStyleDecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
         pub starknet_vault_kit_decoder_and_sanitizer: StarknetVaultKitDecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
@@ -97,6 +110,8 @@ pub mod SimpleDecoderAndSanitizer {
         VesuDecoderAndSanitizerEvent: VesuDecoderAndSanitizerComponent::Event,
         #[flat]
         AvnuExchangeDecoderAndSanitizerEvent: AvnuExchangeDecoderAndSanitizerComponent::Event,
+        #[flat]
+        DefiSpringSNFStyleDecoderAndSanitizerEvent: DefiSpringSNFStyleDecoderAndSanitizerComponent::Event,
         #[flat]
         StarknetVaultKitDecoderAndSanitizerEvent: StarknetVaultKitDecoderAndSanitizerComponent::Event,
         #[flat]

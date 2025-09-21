@@ -60,6 +60,10 @@ pub mod decoders_and_sanitizers {
         pub mod interface;
         pub mod vesu_decoder_and_sanitizer;
     }
+    pub mod defi_spring_snf_style {
+        pub mod defi_spring_snf_style_decoder_and_sanitizer;
+        pub mod interface;
+    }
     pub mod starknet_vault_kit_decoder_and_sanitizer {
         pub mod interface;
         pub mod starknet_vault_kit_decoder_and_sanitizer;
@@ -68,7 +72,6 @@ pub mod decoders_and_sanitizers {
         pub mod interface;
         pub mod vesu_v2_decoder_and_sanitizer;
     }
-
     pub mod multiply_decoder_and_sanitizer {
         pub mod interface;
         pub mod multiply_decoder_and_sanitizer;
