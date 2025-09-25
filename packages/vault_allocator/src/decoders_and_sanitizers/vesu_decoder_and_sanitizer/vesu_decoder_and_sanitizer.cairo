@@ -6,7 +6,8 @@
 pub mod VesuDecoderAndSanitizerComponent {
     use vault_allocator::decoders_and_sanitizers::decoder_custom_types::ModifyPositionParams;
     use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::interface::IVesuDecoderAndSanitizer;
-
+    use starknet::ContractAddress;
+    
     #[storage]
     pub struct Storage {}
 
@@ -26,6 +27,16 @@ pub mod VesuDecoderAndSanitizerComponent {
             params.collateral_asset.serialize(ref serialized_struct);
             params.debt_asset.serialize(ref serialized_struct);
             params.user.serialize(ref serialized_struct);
+            serialized_struct.span()
+        }
+
+        fn modify_delegation(
+            self: @ComponentState<TContractState>, pool_id: felt252, 
+            delegatee: ContractAddress, delegation: bool
+        ) -> Span<felt252> {
+            let mut serialized_struct: Array<felt252> = ArrayTrait::new();
+            pool_id.serialize(ref serialized_struct);
+            delegatee.serialize(ref serialized_struct);
             serialized_struct.span()
         }
     }

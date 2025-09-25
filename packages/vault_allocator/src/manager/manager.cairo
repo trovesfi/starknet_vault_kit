@@ -87,7 +87,6 @@ pub mod Manager {
         }
     }
 
-
     #[abi(embed_v0)]
     impl ManagerImpl of IManager<ContractState> {
         fn vault_allocator(self: @ContractState) -> ContractAddress {
