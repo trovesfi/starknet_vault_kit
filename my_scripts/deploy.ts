@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { ContractAddr, Deployer, getMainnetConfig, Global, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalStrategies, UniversalStrategy, UniversalStrategySettings, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
+import { ContractAddr, Deployer, getMainnetConfig, Global, HyperLSTStrategies, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalLstMultiplierStrategy, UniversalStrategies, UniversalStrategy, UniversalStrategySettings, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
 import { byteArray, CallData, Contract, hash, num, provider, shortString, uint256 } from 'starknet';
 import * as CommonSettings from './config.json';
 import { StandardMerkleTree, LeafData } from './merkle';
@@ -16,7 +16,7 @@ console.log('url', process.env.RPC_URL);
 const config = getMainnetConfig(process.env.RPC_URL!, 'latest');
 const acc = Deployer.getAccount('strkfarmadmin', config, process.env.ACCOUNT_SECURE_PASSWORD!, process.env.ACCOUNT_FILE || 'accounts.json');
 const OWNER = ContractAddr.from(acc.address);
-const FEE_RECIPIENT = ContractAddr.from(acc.address);
+const FEE_RECIPIENT = ContractAddr.from('0x06419f7DeA356b74bC1443bd1600AB3831b7808D1EF897789FacFAd11a172Da7');
 const VAULT_PACKAGE = 'vault';
 const VAULT_ALLOCATOR_PACKAGE = 'vault_allocator';
 const SIMPLE_SANITIZER = ContractAddr.from('0x3798dc4f83fdfad199e5236e3656cf2fb79bc50c00504d0dd41522e0f042072');
@@ -27,18 +27,19 @@ const universalUSDCVault = new UniversalStrategy(config, pricer, UniversalStrate
 async function deployStrategy() {
     // prepare vault contract
     // ! ensure correct names and token
+    const symbol = 'xLBTC'
     const vaultContract = [{
         contract_name: 'Vault',
         package_name: VAULT_PACKAGE,
         constructorData: getVaultConstructorCall({
             // ! update all 3
-            name: 'Troves USDT Evergreen',
-            symbol: 'tUSDT-E',
-            underlying_asset: Global.getDefaultTokens().find(token => token.symbol === 'USDT')?.address!,
+            name: `Troves Hyper ${symbol}`,
+            symbol: `t${symbol}-H`,
+            underlying_asset: Global.getDefaultTokens().find(token => token.symbol === symbol)?.address!,
             owner: OWNER,
             fees_recipient: FEE_RECIPIENT,
             ...CommonSettings.vault.default_settings,
-            max_delta: getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 6)
+            max_delta: getMaxDelta(40, CommonSettings.vault.default_settings.report_delay * 6)
         })
     }];
 
@@ -77,7 +78,6 @@ async function deployStrategy() {
         constructorData: {
             owner: OWNER.toString(),
             vault_allocator: vaultAllocatorDeploymentInfo[0].address,
-            vesu_singleton: CommonSettings.vesu.singleton,
         }
     }];
 
@@ -123,8 +123,8 @@ async function configureSettings(vaultContracts: VaultContracts) {
 
     await Deployer.executeTransactions([
         setRedeemContractCall,
-        // setVaultAllocatorCall,
-        // setManagerCall
+        setVaultAllocatorCall,
+        setManagerCall
     ], acc, provider, 'Setup vault configs')
 }
 
@@ -324,15 +324,60 @@ async function unpause(strategy: UniversalStrategy<UniversalStrategySettings>) {
   }
 
 if (require.main === module) {
-    // deployStrategy();
-    const strategy = UniversalStrategies.find(u => u.name.includes('USDC'))!;
-    const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
+    // Contract deployed: Vault, addr: 0x46c7a54c82b1fe374353859f554a40b8bd31d3e30f742901579e7b57b1b5960
+    // Contract deployed: RedeemRequest, addr: 0x51e40b839dc0c2feca923f863072673b94abfa2483345be3b30b457a90d095
+    // Contract deployed: VaultAllocator, addr: 0x511d07953a09bc7c505970891507c5a2486d2ea22752601a14db092186d7caa
+    // Contract deployed: Manager, addr: 0x5d499cd333757f461a0bedaca3dfc4d77320c773037e0aa299f22a6dbfdc03a
+
+    // xSTRK
     const vaultContracts = {
-        vault: strategy.address,
-        redeemRequest: strategy.additionalInfo.redeemRequestNFT,
-        vaultAllocator: strategy.additionalInfo.vaultAllocator,
-        manager: strategy.additionalInfo.manager
+        vault: ContractAddr.from('0x46c7a54c82b1fe374353859f554a40b8bd31d3e30f742901579e7b57b1b5960'),
+        redeemRequest: ContractAddr.from('0x51e40b839dc0c2feca923f863072673b94abfa2483345be3b30b457a90d095'),
+        vaultAllocator: ContractAddr.from('0x511d07953a09bc7c505970891507c5a2486d2ea22752601a14db092186d7caa'),
+        manager: ContractAddr.from('0x5d499cd333757f461a0bedaca3dfc4d77320c773037e0aa299f22a6dbfdc03a')
     }
+
+    // xsBTC
+    // const vaultContracts = {
+    //     vault: ContractAddr.from('0x437ef1e7d0f100b2e070b7a65cafec0b2be31b0290776da8b4112f5473d8d9'),
+    //     redeemRequest: ContractAddr.from('0x429e8ee8bc7ecd1ade72630d350a2e0f10f9a2507c45f188ba17fe8f2ab4cf3'),
+    //     vaultAllocator: ContractAddr.from('0x60c2d856936b975459a5b4eb28b8672d91f757bd76cebb6241f8d670185dc01'),
+    //     manager: ContractAddr.from('0xc9ac023090625b0be3f6532ca353f086746f9c09f939dbc1b2613f09e5f821')
+    // }
+    
+    // xtBTC
+    // const vaultContracts = {
+    //     vault: ContractAddr.from('0x47d5f68477e5637ce0e56436c6b5eee5a354e6828995dae106b11a48679328'),
+    //     redeemRequest: ContractAddr.from('0xeac9032f02057779816e38a6cb9185d12d86b3aacc9949b96b36de359c1e3'),
+    //     vaultAllocator: ContractAddr.from('0x50bbd4fe69f841ecb13b2619fe50ebfa4e8944671b5d0ebf7868fd80c61b31e'),
+    //     manager: ContractAddr.from('0xc4cc3e08029a0ae076f5fdfca70575abb78d23c5cd1c49a957f7e697885401')
+    // }
+
+    // xWBTC
+    // const vaultContracts = {
+    //     vault: ContractAddr.from('0x2da9d0f96a46b453f55604313785dc866424240b1c6811d13bef594343db818'),
+    //     redeemRequest: ContractAddr.from('0x7a5dc288325456f05e70e9616e16bc02ffbe448f4b89f80b47c0970b989c7c'),
+    //     vaultAllocator: ContractAddr.from('0x57b5c1bb457b5e840a2714ae53ada87d77be2f3fd33a59b4fe709ef20c020c1'),
+    //     manager: ContractAddr.from('0x75866db44c81e6986f06035206ee9c7d15833ddb22d6a22c016cfb5c866a491')
+    // }
+
+    // xLBTC
+    // Contract deployed: Vault, addr: 0x38e96a301428d204ab4553799aa386a0f14a5ef9b30a5830be1814e4fb8da1c
+    // Contract deployed: RedeemRequest, addr: 0x268017b4c8b2117ca0136d9a77e3666db44b143447566f0746ca0b1c9ab1e72
+    // Contract deployed: VaultAllocator, addr: 0x3e98774ca0508505ba6d7f17d95ec391648f44f947b0d211241464a4f5b9b20
+    // Contract deployed: Manager, addr: 0x18d376446d9df1f783e17aff1f21bac3d97aa3ba378e367742cdd744468ad35
+    // Aum oracle 0x521a3f339c65e918e0d8a065b14baef1ea25676bb7fca1e0238ac47e20d7755
+
+    deployStrategy();
+    // const strategy = HyperLSTStrategies.find(u => u.name.includes('xSTRK'))!;
+    // const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
+    // const vaultStrategy = new UniversalLstMultiplierStrategy(config, pricer, strategy);
+    // const vaultContracts = {
+    //     vault: strategy.address,
+    //     redeemRequest: strategy.additionalInfo.redeemRequestNFT,
+    //     vaultAllocator: strategy.additionalInfo.vaultAllocator,
+    //     manager: strategy.additionalInfo.manager
+    // }
     
     async function setConfig() {
         // await upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
@@ -341,16 +386,16 @@ if (require.main === module) {
         // await grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
         // await setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
 
-        for (let i=0; i < UniversalStrategies.length; i++) {
-            const u = UniversalStrategies[i];
-            const strategy = new UniversalStrategy(config, pricer, u);
+        // for (let i=0; i < UniversalStrategies.length; i++) {
+        //     const u = UniversalStrategies[i];
+        //     const strategy = new UniversalStrategy(config, pricer, u);
             // await setManagerRoot(strategy, ContractAddr.from(RELAYER));
             // await setMaxDelta(strategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 24));
             // await grantRole(u, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
             // await setFeesConfig(strategy);
             // await pause(strategy);
-            await unpause(strategy);
-        }
+        //     await unpause(strategy);
+        // }
     }
     setConfig();
     // configurePriceRouter();
