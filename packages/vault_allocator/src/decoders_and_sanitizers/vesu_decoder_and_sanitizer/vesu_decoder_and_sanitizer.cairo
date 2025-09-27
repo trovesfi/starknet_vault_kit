@@ -31,11 +31,10 @@ pub mod VesuDecoderAndSanitizerComponent {
         }
 
         fn modify_delegation(
-            self: @ComponentState<TContractState>, pool_id: felt252, 
+            self: @ComponentState<TContractState>,
             delegatee: ContractAddress, delegation: bool
         ) -> Span<felt252> {
             let mut serialized_struct: Array<felt252> = ArrayTrait::new();
-            pool_id.serialize(ref serialized_struct);
             delegatee.serialize(ref serialized_struct);
             serialized_struct.span()
         }

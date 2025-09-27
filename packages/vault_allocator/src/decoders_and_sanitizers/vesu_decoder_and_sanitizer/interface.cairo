@@ -8,6 +8,6 @@ use starknet::ContractAddress;
 #[starknet::interface]
 pub trait IVesuDecoderAndSanitizer<T> {
     fn modify_position(self: @T, params: ModifyPositionParams) -> Span<felt252>;
-    fn modify_delegation(self: @T, pool_id: felt252, delegatee: ContractAddress, delegation: bool) -> Span<felt252>;
+    fn modify_delegation(self: @T, delegatee: ContractAddress, delegation: bool) -> Span<felt252>;
 }
 

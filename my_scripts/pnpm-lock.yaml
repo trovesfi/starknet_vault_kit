@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@strkfarm/sdk': link:../../../Library/pnpm/global/5/node_modules/@strkfarm/sdk
+
 importers:
 
   .:
@@ -14,6 +17,9 @@ importers:
       '@noble/curves':
         specifier: ^2.0.0
         version: 2.0.0
+      '@strkfarm/sdk':
+        specifier: link:../../../Library/pnpm/global/5/node_modules/@strkfarm/sdk
+        version: link:../../../Library/pnpm/global/5/node_modules/@strkfarm/sdk
       dotenv:
         specifier: ^17.2.1
         version: 17.2.1
