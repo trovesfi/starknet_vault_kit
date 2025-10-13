@@ -4,7 +4,6 @@
 
 // Standard library imports
 use starknet::ContractAddress;
-use vault::redeem_request::interface::RedeemRequestInfo;
 
 #[starknet::interface]
 pub trait IVault<TContractState> {
@@ -46,5 +45,12 @@ pub trait IVault<TContractState> {
     fn last_report_timestamp(self: @TContractState) -> u64;
     fn max_delta(self: @TContractState) -> u256;
     fn due_assets_from_id(self: @TContractState, id: u256) -> u256;
+    fn due_assets_from_owner(self: @TContractState, owner: ContractAddress) -> u256;
+    
+    // Limit configuration functions
+    fn set_deposit_limit(ref self: TContractState, limit: u256);
+    fn set_mint_limit(ref self: TContractState, limit: u256);
+    fn get_deposit_limit(self: @TContractState) -> u256;
+    fn get_mint_limit(self: @TContractState) -> u256;
 }
 

@@ -29,7 +29,9 @@ pub mod VaultAllocator {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
+        // #[flat]
         OwnableEvent: OwnableComponent::Event,
+        // #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
         CallPerformed: CallPerformed,
     }
