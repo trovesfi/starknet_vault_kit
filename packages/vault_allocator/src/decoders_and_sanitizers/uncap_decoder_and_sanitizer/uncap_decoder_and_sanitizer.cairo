@@ -3,9 +3,9 @@
 // Licensed under the MIT License. See LICENSE file for details.
 
 #[starknet::component]
-pub mod BaseDecoderAndSanitizerComponent {
+pub mod UnCapDecoderAndSanitizerComponent {
     use starknet::ContractAddress;
-    use vault_allocator::decoders_and_sanitizers::interface::IBaseDecoderAndSanitizer;
+    use vault_allocator::decoders_and_sanitizers::uncap_decoder_and_sanitizer::interface::IUnCapDecoderAndSanitizer;
 
     #[storage]
     pub struct Storage {
@@ -16,19 +16,20 @@ pub mod BaseDecoderAndSanitizerComponent {
     #[derive(Drop, Debug, PartialEq, starknet::Event)]
     pub enum Event {}
 
-    #[embeddable_as(BaseDecoderAndSanitizerImpl)]
-    impl BaseDecoderAndSanitizer<
+    #[embeddable_as(UnCapDecoderAndSanitizerImpl)]
+    impl UnCapDecoderAndSanitizer<
         TContractState, +HasComponent<TContractState>,
-    > of IBaseDecoderAndSanitizer<ComponentState<TContractState>> {
-        fn approve(
-            self: @ComponentState<TContractState>, spender: ContractAddress, amount: u256,
+    > of IUnCapDecoderAndSanitizer<ComponentState<TContractState>> {
+        fn provide_to_sp(
+            self: @ComponentState<TContractState>, top_up: u256, do_claim: bool,
         ) -> Span<felt252> {
             let mut serialized_struct: Array<felt252> = ArrayTrait::new();
-            spender.serialize(ref serialized_struct);
             serialized_struct.span()
         }
 
-        fn bring_liquidity(self: @ComponentState<TContractState>, amount: u256) -> Span<felt252> {
+        fn withdraw_from_sp(
+            self: @ComponentState<TContractState>, amount: u256, do_claim: bool,
+        ) -> Span<felt252> {
             let mut serialized_struct: Array<felt252> = ArrayTrait::new();
             serialized_struct.span()
         }

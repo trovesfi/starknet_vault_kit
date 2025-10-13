@@ -1,0 +1,24 @@
+{
+  "name": "scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "tsx cli.ts compile",
+    "list": "tsx cli.ts list",
+    "cli": "tsx cli.ts"
+  },
+  "keywords": [],
+  "author": "akiraonstarknet",
+  "license": "ISC",
+  "dependencies": {
+    "starknet": "^8.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "commander": "^14.0.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
