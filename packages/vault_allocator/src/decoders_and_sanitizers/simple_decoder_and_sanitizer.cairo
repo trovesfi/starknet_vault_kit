@@ -7,6 +7,7 @@ pub mod SimpleDecoderAndSanitizer {
     use vault_allocator::decoders_and_sanitizers::avnu_exchange_decoder_and_sanitizer::avnu_exchange_decoder_and_sanitizer::AvnuExchangeDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::base_decoder_and_sanitizer::BaseDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::erc4626_decoder_and_sanitizer::erc4626_decoder_and_sanitizer::Erc4626DecoderAndSanitizerComponent;
+    use vault_allocator::decoders_and_sanitizers::multiply_decoder_and_sanitizer::multiply_decoder_and_sanitizer::MultiplyDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::starknet_vault_kit_decoder_and_sanitizer::starknet_vault_kit_decoder_and_sanitizer::StarknetVaultKitDecoderAndSanitizerComponent;
     use vault_allocator::decoders_and_sanitizers::vesu_decoder_and_sanitizer::vesu_decoder_and_sanitizer::VesuDecoderAndSanitizerComponent;
 
@@ -39,6 +40,12 @@ pub mod SimpleDecoderAndSanitizer {
         event: AvnuExchangeDecoderAndSanitizerEvent,
     );
 
+    component!(
+        path: MultiplyDecoderAndSanitizerComponent,
+        storage: multiply_decoder_and_sanitizer,
+        event: MultiplyDecoderAndSanitizerEvent,
+    );
+
 
     #[abi(embed_v0)]
     impl BaseDecoderAndSanitizerImpl =
@@ -58,6 +65,10 @@ pub mod SimpleDecoderAndSanitizer {
             ContractState,
         >;
 
+    #[abi(embed_v0)]
+    impl MultiplyDecoderAndSanitizerImpl =
+        MultiplyDecoderAndSanitizerComponent::MultiplyDecoderAndSanitizerImpl<ContractState>;
+
 
     #[storage]
     pub struct Storage {
@@ -71,6 +82,8 @@ pub mod SimpleDecoderAndSanitizer {
         pub avnu_exchange_decoder_and_sanitizer: AvnuExchangeDecoderAndSanitizerComponent::Storage,
         #[substorage(v0)]
         pub starknet_vault_kit_decoder_and_sanitizer: StarknetVaultKitDecoderAndSanitizerComponent::Storage,
+        #[substorage(v0)]
+        pub multiply_decoder_and_sanitizer: MultiplyDecoderAndSanitizerComponent::Storage,
     }
 
     #[event]
@@ -86,5 +99,7 @@ pub mod SimpleDecoderAndSanitizer {
         AvnuExchangeDecoderAndSanitizerEvent: AvnuExchangeDecoderAndSanitizerComponent::Event,
         #[flat]
         StarknetVaultKitDecoderAndSanitizerEvent: StarknetVaultKitDecoderAndSanitizerComponent::Event,
+        #[flat]
+        MultiplyDecoderAndSanitizerEvent: MultiplyDecoderAndSanitizerComponent::Event,
     }
 }

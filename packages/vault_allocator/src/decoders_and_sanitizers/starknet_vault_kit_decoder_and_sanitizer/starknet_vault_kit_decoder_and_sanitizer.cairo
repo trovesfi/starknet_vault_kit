@@ -35,6 +35,7 @@ pub mod StarknetVaultKitDecoderAndSanitizerComponent {
 
         fn claim_redeem(self: @ComponentState<TContractState>, id: u256) -> Span<felt252> {
             let mut serialized_struct: Array<felt252> = ArrayTrait::new();
+            id.serialize(ref serialized_struct);
             serialized_struct.span()
         }
     }

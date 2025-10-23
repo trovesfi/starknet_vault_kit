@@ -49,13 +49,9 @@ pub mod Manager {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
-        #[flat]
         SRC5Event: SRC5Component::Event,
-        #[flat]
         AccessControlEvent: AccessControlComponent::Event,
-        #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
-        #[flat]
         PausableEvent: PausableComponent::Event,
     }
 

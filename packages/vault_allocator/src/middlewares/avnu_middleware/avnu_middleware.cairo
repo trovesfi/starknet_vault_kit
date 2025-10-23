@@ -11,7 +11,10 @@ pub mod AvnuMiddleware {
     use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use openzeppelin::utils::math;
-    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
+    use starknet::storage::{
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        StoragePointerWriteAccess,
+    };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;
     use vault_allocator::integration_interfaces::avnu::{

@@ -18,8 +18,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════
 
 #[starknet::contract]
-pub mod VaultMigration {
-    use core::num::traits::{Bounded, Zero};
+pub mod Vault {
+    use core::num::traits::{Zero, Bounded};
     use openzeppelin::access::accesscontrol::AccessControlComponent;
     use openzeppelin::interfaces::erc20::{
         ERC20ABIDispatcher, ERC20ABIDispatcherTrait, IERC20Metadata,
@@ -32,7 +32,9 @@ pub mod VaultMigration {
     use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::security::pausable::PausableComponent;
     use openzeppelin::token::erc20::extensions::erc4626::ERC4626Component::Fee;
-    use openzeppelin::token::erc20::extensions::erc4626::{DefaultConfig, ERC4626Component};
+    use openzeppelin::token::erc20::extensions::erc4626::{
+        DefaultConfig, ERC4626Component, ERC4626DefaultNoFees,
+    };
     use openzeppelin::token::erc20::{
         DefaultConfig as ERC20DefaultConfig, ERC20Component, ERC20HooksEmptyImpl,
     };
@@ -85,38 +87,6 @@ pub mod VaultMigration {
     impl ERC4626Impl = ERC4626Component::ERC4626Impl<ContractState>;
     impl ERC4626InternalImpl = ERC4626Component::InternalImpl<ContractState>;
 
-
-    impl ERC4626FeesImpl of ERC4626Component::FeeConfigTrait<ContractState> {
-        fn calculate_deposit_fee(
-            self: @ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
-        ) -> Option<Fee> {
-            Option::None
-        }
-
-        fn calculate_mint_fee(
-            self: @ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
-        ) -> Option<Fee> {
-            Option::None
-        }
-
-        fn calculate_withdraw_fee(
-            self: @ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
-        ) -> Option<Fee> {
-            let contract_state = self.get_contract();
-            let fee_shares = contract_state._calculate_fee_shares(shares);
-            Option::Some(Fee::Shares(fee_shares))
-        }
-
-        fn calculate_redeem_fee(
-            self: @ERC4626Component::ComponentState<ContractState>, assets: u256, shares: u256,
-        ) -> Option<Fee> {
-            let contract_state = self.get_contract();
-            let fee_shares = contract_state._calculate_fee_shares(shares);
-            Option::Some(Fee::Shares(fee_shares))
-        }
-    }
-
-
     // --- Custom ERC4626 Limits Implementation ---
     // Custom implementation of deposit/withdraw limits
     // Uses max u256 as sentinel value for "unlimited"
@@ -134,7 +104,7 @@ pub mod VaultMigration {
             } else {
                 let total_assets = self.get_total_assets();
                 if total_assets >= limit {
-                    Option::Some(0)
+                    Option::Some(0) 
                 } else {
                     Option::Some(limit - total_assets)
                 }
@@ -147,12 +117,23 @@ pub mod VaultMigration {
         fn mint_limit(
             self: @ERC4626Component::ComponentState<ContractState>, receiver: ContractAddress,
         ) -> Option<u256> {
-            let deposit_limit_opt = self.deposit_limit(receiver);
-            match deposit_limit_opt {
-                Option::None => Option::None,
-                Option::Some(deposit_remaining) => {
-                    Option::Some(self._convert_to_shares(deposit_remaining, Rounding::Floor))
-                },
+            let contract_state = self.get_contract();
+            let limit = contract_state.mint_limit.read();
+            if limit == Bounded::MAX {
+                Option::None
+            } else {
+                let deposit_limit_opt = self.deposit_limit(receiver);
+                match deposit_limit_opt {
+                    Option::None => Option::None,
+                    Option::Some(deposit_remaining) => {
+                        if deposit_remaining == 0 {
+                            Option::Some(0)
+                        } else {
+                            let shares = self._convert_to_shares(deposit_remaining, Rounding::Floor);
+                            Option::Some(shares)
+                        }
+                    }
+                }
             }
         }
 
@@ -233,7 +214,8 @@ pub mod VaultMigration {
         redeem_request: IRedeemRequestDispatcher, // NFT contract for tracking redemption requests
         // --- ERC4626 Limits ---
         // Note: max u256 means unlimited, any other value (including 0) sets a specific limit
-        deposit_limit: u256 // Maximum deposit amount 
+        deposit_limit: u256, // Maximum deposit amount 
+        mint_limit: u256, // Maximum mint amount 
     }
 
     // --- Events ---
@@ -241,17 +223,11 @@ pub mod VaultMigration {
     #[derive(Drop, starknet::Event)]
     pub enum Event {
         // Component events
-        #[flat]
         ERC20Event: ERC20Component::Event,
-        #[flat]
         ERC4626Event: ERC4626Component::Event,
-        #[flat]
         SRC5Event: SRC5Component::Event,
-        #[flat]
         AccessControlEvent: AccessControlComponent::Event,
-        #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
-        #[flat]
         PausableEvent: PausableComponent::Event,
         // Vault-specific events
         RedeemRequested: RedeemRequested, // Emitted when a redemption is requested
@@ -352,6 +328,7 @@ pub mod VaultMigration {
         // max u256 is used as sentinel value for "no limit"
         let max_limit: u256 = Bounded::MAX;
         self.deposit_limit.write(max_limit);
+        self.mint_limit.write(max_limit);
         self
             .emit(
                 Report {
@@ -441,8 +418,7 @@ pub mod VaultMigration {
             shares: u256,
             fee: Option<Fee>,
         ) {
-            let mut contract_state = self.get_contract_mut();
-            contract_state.pausable.assert_not_paused();
+            Errors::not_implemented(); // Withdrawals disabled - use request_redeem instead
         }
 
 
@@ -456,10 +432,7 @@ pub mod VaultMigration {
             assets: u256,
             shares: u256,
             fee: Option<Fee>,
-        ) {
-            let mut contract_state = self.get_contract_mut();
-            contract_state.buffer.write(contract_state.buffer.read() - assets);
-        }
+        ) {}
 
 
         /// Hook executed before transferring assets and minting shares during deposit
@@ -614,14 +587,19 @@ pub mod VaultMigration {
             }
 
             // Calculate and collect redemption fees
-            let fee_shares = self._calculate_fee_shares(shares);
+            let fees_recipient = self.fees_recipient.read();
+            let redeem_fees = if (owner == fees_recipient) {
+                0
+            } else {
+                self.redeem_fees.read()
+            };
+            let fee_shares = (shares * redeem_fees)
+                / WAD; // Fee calculation: shares * fee_rate / 1e18
 
             if (fee_shares.is_non_zero()) {
                 self
                     .erc20
-                    .update(
-                        owner, self.fees_recipient.read(), fee_shares,
-                    ); // Transfer fee shares to recipient
+                    .update(owner, fees_recipient, fee_shares); // Transfer fee shares to recipient
             }
             let remaining_shares = shares - fee_shares; // Shares after fee deduction
 
@@ -823,10 +801,10 @@ pub mod VaultMigration {
                     Errors::vault_allocator_not_set();
                 }
                 // Deploy all remaining buffer to allocator
-                // ERC20ABIDispatcher { contract_address: self.erc4626.asset() }
-                //     .transfer(alloc, remaining_buffer);
-                self.aum.write(new_aum); // Update AUM to include deployed assets
-                self.buffer.write(remaining_buffer); // Buffer is now empty
+                ERC20ABIDispatcher { contract_address: self.erc4626.asset() }
+                    .transfer(alloc, remaining_buffer);
+                self.aum.write(new_aum + remaining_buffer); // Update AUM to include deployed assets
+                self.buffer.write(0); // Buffer is now empty
             } else {
                 self.aum.write(new_aum); // Keep buffer for pending redemptions
                 self.buffer.write(remaining_buffer);
@@ -987,17 +965,28 @@ pub mod VaultMigration {
 
         // --- Limit Configuration Functions ---
 
-        /// Set the deposit limit (max u256 for unlimited, any other value including 0 for specific
-        /// limit)
+        /// Set the deposit limit (max u256 for unlimited, any other value including 0 for specific limit)
         /// Only callable by owner
         fn set_deposit_limit(ref self: ContractState, limit: u256) {
             self.access_control.assert_only_role(OWNER_ROLE);
             self.deposit_limit.write(limit);
         }
 
+        /// Set the mint limit (max u256 for unlimited, any other value including 0 for specific limit)
+        /// Only callable by owner
+        fn set_mint_limit(ref self: ContractState, limit: u256) {
+            self.access_control.assert_only_role(OWNER_ROLE);
+            self.mint_limit.write(limit);
+        }
+
         /// Get the current deposit limit (max u256 means unlimited)
         fn get_deposit_limit(self: @ContractState) -> u256 {
             self.deposit_limit.read()
+        }
+
+        /// Get the current mint limit (max u256 means unlimited)
+        fn get_mint_limit(self: @ContractState) -> u256 {
+            self.mint_limit.read()
         }
 
         fn due_assets_from_owner(self: @ContractState, owner: ContractAddress) -> u256 {
@@ -1124,11 +1113,6 @@ pub mod VaultMigration {
                 i += 1;
             }
             total_redeem_assets
-        }
-
-
-        fn _calculate_fee_shares(self: @ContractState, shares: u256) -> u256 {
-            (shares * self.redeem_fees.read()) / WAD
         }
     }
 }
