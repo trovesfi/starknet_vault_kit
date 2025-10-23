@@ -5,7 +5,6 @@
 use starknet::ContractAddress;
 
 #[starknet::interface]
-pub trait IBaseDecoderAndSanitizer<T> {
-    fn approve(self: @T, spender: ContractAddress, amount: u256) -> Span<felt252>;
-    fn bring_liquidity(self: @T, amount: u256) -> Span<felt252>;
+pub trait IAumProvider4626<TContractState> {
+    fn get_strategy_4626(self: @TContractState) -> ContractAddress;
 }

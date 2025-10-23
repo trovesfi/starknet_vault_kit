@@ -16,8 +16,8 @@ pub mod MultiplyDecoderAndSanitizerComponent {
     #[derive(Drop, Debug, PartialEq, starknet::Event)]
     pub enum Event {}
 
-    #[embeddable_as(VesuDecoderAndSanitizerImpl)]
-    impl VesuDecoderAndSanitizer<
+    #[embeddable_as(MultiplyDecoderAndSanitizerImpl)]
+    impl MultiplyDecoderAndSanitizer<
         TContractState, +HasComponent<TContractState>,
     > of IMultiplyDecoderAndSanitizer<ComponentState<TContractState>> {
         fn modify_lever(

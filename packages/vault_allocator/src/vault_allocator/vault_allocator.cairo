@@ -2,10 +2,20 @@
 // Copyright (c) 2025 Starknet Vault Kit
 // Licensed under the MIT License. See LICENSE file for details.
 
+#[starknet::interface]
+pub trait IVaultMigration<TContractState> {
+    fn bring_liquidity(ref self: TContractState, amount: u256);
+}
+
+
 #[starknet::contract]
-pub mod VaultAllocator {
+pub mod VaultAllocatorMigration {
     use openzeppelin::access::ownable::OwnableComponent;
+    use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+    use openzeppelin::interfaces::erc4626::{ERC4626ABIDispatcher, ERC4626ABIDispatcherTrait};
+    use openzeppelin::interfaces::erc721::{ERC721ReceiverMixin, IERC721_RECEIVER_ID};
     use openzeppelin::interfaces::upgrades::IUpgradeable;
+    use openzeppelin::introspection::src5::SRC5Component;
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use starknet::account::Call;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
@@ -13,12 +23,16 @@ pub mod VaultAllocator {
     use starknet::{ContractAddress, SyscallResultTrait, get_caller_address};
     use vault_allocator::vault_allocator::errors::Errors;
     use vault_allocator::vault_allocator::interface::IVaultAllocator;
+    use super::{IVaultMigrationDispatcher, IVaultMigrationDispatcherTrait};
 
+    component!(path: SRC5Component, storage: src5, event: SRC5Event);
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
 
     #[storage]
     struct Storage {
+        #[substorage(v0)]
+        src5: SRC5Component::Storage,
         #[substorage(v0)]
         ownable: OwnableComponent::Storage,
         #[substorage(v0)]
@@ -29,7 +43,11 @@ pub mod VaultAllocator {
     #[event]
     #[derive(Drop, starknet::Event)]
     pub enum Event {
+        #[flat]
+        SRC5Event: SRC5Component::Event,
+        #[flat]
         OwnableEvent: OwnableComponent::Event,
+        #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
         CallPerformed: CallPerformed,
     }
@@ -54,6 +72,9 @@ pub mod VaultAllocator {
     impl OwnableImpl = OwnableComponent::OwnableImpl<ContractState>;
     impl OwnableInternalImpl = OwnableComponent::InternalImpl<ContractState>;
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
+
+    impl SRC5Impl = SRC5Component::SRC5Impl<ContractState>;
+    impl SRC5InternalImpl = SRC5Component::InternalImpl<ContractState>;
 
     #[abi(embed_v0)]
     impl UpgradeableImpl of IUpgradeable<ContractState> {
@@ -92,6 +113,40 @@ pub mod VaultAllocator {
         }
     }
 
+    #[abi(embed_v0)]
+    fn bring_liquidity(ref self: ContractState, vault: ContractAddress, amount: u256) {
+        self.ownable.assert_only_owner();
+        let underlying_asset = ERC4626ABIDispatcher { contract_address: vault }.asset();
+        ERC20ABIDispatcher { contract_address: underlying_asset }.approve(vault, amount);
+        IVaultMigrationDispatcher { contract_address: vault }.bring_liquidity(amount);
+    }
+
+    #[abi(embed_v0)]
+    impl ERC721ReceiverMixinImpl of ERC721ReceiverMixin<ContractState> {
+        fn on_erc721_received(
+            self: @ContractState,
+            operator: ContractAddress,
+            from: ContractAddress,
+            token_id: u256,
+            data: Span<felt252>,
+        ) -> felt252 {
+            IERC721_RECEIVER_ID
+        }
+        fn onERC721Received(
+            self: @ContractState,
+            operator: ContractAddress,
+            from: ContractAddress,
+            tokenId: u256,
+            data: Span<felt252>,
+        ) -> felt252 {
+            IERC721_RECEIVER_ID
+        }
+
+        fn supports_interface(self: @ContractState, interface_id: felt252) -> bool {
+            self.src5.supports_interface(interface_id)
+        }
+    }
+
 
     #[generate_trait]
     impl InternalFunctions of InternalFunctionsTrait {
@@ -107,7 +162,9 @@ pub mod VaultAllocator {
             selector: felt252,
             calldata: Span<felt252>,
         ) -> Span<felt252> {
+            self.src5.register_interface(IERC721_RECEIVER_ID);
             let result = call_contract_syscall(to, selector, calldata).unwrap_syscall();
+            self.src5.deregister_interface(IERC721_RECEIVER_ID);
             self.emit(CallPerformed { to, selector, calldata, result });
             result
         }

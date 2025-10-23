@@ -8,6 +8,17 @@ pub mod vault {
     pub mod vault;
 }
 
+pub mod aum_provider {
+    pub mod base_aum_provider;
+    pub mod errors;
+    pub mod interface;
+    pub mod aum_provider_4626 {
+        pub mod aum_provider_4626;
+        pub mod errors;
+        pub mod interface;
+    }
+}
+
 
 pub mod redeem_request {
     pub mod errors;
@@ -17,6 +28,7 @@ pub mod redeem_request {
 
 #[cfg(test)]
 pub mod test {
+    pub mod mock_erc721_receiver;
     pub mod utils;
     pub mod units {
         pub mod redeem_request;
