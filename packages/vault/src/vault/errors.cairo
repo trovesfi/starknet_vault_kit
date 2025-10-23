@@ -66,4 +66,8 @@ pub mod Errors {
     pub fn invalid_new_aum(new_aum: u256) {
         panic!("Invalid new AUM: {}", new_aum);
     }
+
+    pub fn caller_is_not_vault_allocator() {
+        panic!("Caller is not the vault allocator");
+    }
 }

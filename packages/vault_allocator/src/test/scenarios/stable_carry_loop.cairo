@@ -9,20 +9,20 @@ use starknet::ContractAddress;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::{
     Amount, AmountDenomination, AmountType, Route,
 };
-use vault_allocator::integration_interfaces::vesu::{
-    IDefaultExtensionPOV2Dispatcher, IDefaultExtensionPOV2DispatcherTrait, ISingletonV2Dispatcher,
-    ISingletonV2DispatcherTrait,
-};
 use vault_allocator::manager::interface::IManagerDispatcherTrait;
-use vault_allocator::middlewares::avnu_middleware::interface::{
-    IAvnuMiddlewareDispatcher, IAvnuMiddlewareDispatcherTrait,
+use vault_allocator::merkle_tree::base::{
+    ManageLeaf, _get_proofs_using_tree, _pad_leafs_to_power_of_two, generate_merkle_tree,
 };
-use vault_allocator::test::register::{ETH, GENESIS_POOL_ID, USDC, USDT, VESU_SINGLETON};
+use vault_allocator::merkle_tree::integrations::avnu::{AvnuConfig, _add_avnu_leafs};
+use vault_allocator::merkle_tree::integrations::erc4626::_add_erc4626_leafs;
+use vault_allocator::merkle_tree::integrations::vesu_v1::{VesuV1Config, _add_vesu_v1_leafs};
+use vault_allocator::merkle_tree::registery::{
+    ETH, GENESIS_POOL_ID, USDC, USDT, VESU_GENESIS_POOL_V_TOKEN_USDT, VESU_SINGLETON,
+};
 use vault_allocator::test::utils::{
-    ManageLeaf, OWNER, STRATEGIST, WAD, _add_avnu_leafs, _add_vesu_leafs, _get_proofs_using_tree,
-    _pad_leafs_to_power_of_two, cheat_caller_address_once, deploy_avnu_middleware, deploy_manager,
+    OWNER, STRATEGIST, WAD, cheat_caller_address_once, deploy_avnu_middleware, deploy_manager,
     deploy_price_router, deploy_simple_decoder_and_sanitizer, deploy_vault_allocator,
-    generate_merkle_tree, initialize_price_router,
+    initialize_price_router,
 };
 use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 
@@ -30,22 +30,40 @@ use vault_allocator::vault_allocator::interface::IVaultAllocatorDispatcherTrait;
 #[test]
 fn test_stable_carry_loop() {
     let vault_allocator = deploy_vault_allocator();
-    let manager = deploy_manager(vault_allocator, VESU_SINGLETON());
+    let manager = deploy_manager(vault_allocator);
     let simple_decoder_and_sanitizer = deploy_simple_decoder_and_sanitizer();
     let price_router = deploy_price_router();
     initialize_price_router(price_router);
-    let avnu_middleware = deploy_avnu_middleware(price_router);
+    let avnu_middleware = deploy_avnu_middleware(
+        vault_allocator.contract_address, price_router, 100, 100000, 1000000,
+    );
 
     let mut leafs: Array<ManageLeaf> = ArrayTrait::new();
     let mut leaf_index: u256 = 0;
-    _add_vesu_leafs(
+
+    // add vesu v1 leafs
+    _add_vesu_v1_leafs(
         ref leafs,
         ref leaf_index,
         vault_allocator.contract_address,
         simple_decoder_and_sanitizer,
-        GENESIS_POOL_ID,
-        array![ETH(), USDT()].span(),
-        array![array![USDC()].span(), array![].span()].span(),
+        array![
+            VesuV1Config {
+                pool_id: GENESIS_POOL_ID,
+                collateral_asset: ETH(),
+                debt_assets: array![USDC()].span(),
+            },
+        ]
+            .span(),
+    );
+
+    // add erc4626 leafs for usdt v-token
+    _add_erc4626_leafs(
+        ref leafs,
+        ref leaf_index,
+        vault_allocator.contract_address,
+        simple_decoder_and_sanitizer,
+        VESU_GENESIS_POOL_V_TOKEN_USDT(),
     );
 
     _add_avnu_leafs(
@@ -54,7 +72,7 @@ fn test_stable_carry_loop() {
         vault_allocator.contract_address,
         simple_decoder_and_sanitizer,
         avnu_middleware,
-        array![(USDC(), USDT())],
+        array![AvnuConfig { sell_token: USDC(), buy_token: USDT() }].span(),
     );
 
     _pad_leafs_to_power_of_two(ref leafs, ref leaf_index);
@@ -109,12 +127,7 @@ fn test_stable_carry_loop() {
     array_of_targets.append(USDC());
     array_of_targets.append(avnu_middleware);
     array_of_targets.append(USDT());
-    let v_token = IDefaultExtensionPOV2Dispatcher {
-        contract_address: ISingletonV2Dispatcher { contract_address: VESU_SINGLETON() }
-            .extension(GENESIS_POOL_ID),
-    }
-        .v_token_for_collateral_asset(GENESIS_POOL_ID, USDT());
-    array_of_targets.append(v_token);
+    array_of_targets.append(VESU_GENESIS_POOL_V_TOKEN_USDT());
 
     let mut array_of_selectors = ArrayTrait::new();
     array_of_selectors.append(selector!("approve"));
@@ -214,7 +227,7 @@ fn test_stable_carry_loop() {
 
     // approve usdt to the v-token
     let mut array_of_calldata_approve_vtoken: Array<felt252> = ArrayTrait::new();
-    v_token.serialize(ref array_of_calldata_approve_vtoken);
+    VESU_GENESIS_POOL_V_TOKEN_USDT().serialize(ref array_of_calldata_approve_vtoken);
     earn_amount_from_swap.serialize(ref array_of_calldata_approve_vtoken);
     array_of_calldatas.append(array_of_calldata_approve_vtoken.span());
 
@@ -225,16 +238,12 @@ fn test_stable_carry_loop() {
     array_of_calldatas.append(array_of_calldata_deposit.span());
 
     let mut manage_leafs: Array<ManageLeaf> = ArrayTrait::new();
-    manage_leafs.append(leafs.at(5).clone());
-    manage_leafs.append(leafs.at(6).clone());
-    manage_leafs.append(leafs.at(12).clone());
-    manage_leafs.append(leafs.at(13).clone());
+    manage_leafs.append(leafs.at(0).clone());
+    manage_leafs.append(leafs.at(1).clone());
     manage_leafs.append(leafs.at(7).clone());
     manage_leafs.append(leafs.at(8).clone());
-
-    cheat_caller_address_once(avnu_middleware, OWNER());
-    IAvnuMiddlewareDispatcher { contract_address: avnu_middleware }
-        .set_slippage_tolerance_bps(100); // 1% slippage
+    manage_leafs.append(leafs.at(2).clone());
+    manage_leafs.append(leafs.at(3).clone());
 
     let manage_proofs = _get_proofs_using_tree(manage_leafs, tree.clone());
 

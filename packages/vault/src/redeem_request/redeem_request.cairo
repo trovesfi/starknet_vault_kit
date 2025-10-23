@@ -9,6 +9,7 @@ mod RedeemRequest {
     };
     use openzeppelin::interfaces::upgrades::IUpgradeable;
     use openzeppelin::introspection::src5::SRC5Component;
+    use openzeppelin::token::erc721::extensions::ERC721EnumerableComponent;
     use openzeppelin::token::erc721::{ERC721Component, ERC721HooksEmptyImpl};
     use openzeppelin::upgrades::upgradeable::UpgradeableComponent;
     use starknet::storage::{
@@ -22,10 +23,16 @@ mod RedeemRequest {
 
     component!(path: SRC5Component, storage: src5, event: SRC5Event);
     component!(path: ERC721Component, storage: erc721, event: ERC721Event);
+    component!(
+        path: ERC721EnumerableComponent, storage: erc721_enumerable, event: ERC721EnumerableEvent,
+    );
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
 
     #[abi(embed_v0)]
     impl ERC721MixinImpl = ERC721Component::ERC721MixinImpl<ContractState>;
+    #[abi(embed_v0)]
+    impl ERC721EnumerableImpl =
+        ERC721EnumerableComponent::ERC721EnumerableImpl<ContractState>;
     impl ERC721InternalImpl = ERC721Component::InternalImpl<ContractState>;
     impl UpgradeableInternalImpl = UpgradeableComponent::InternalImpl<ContractState>;
 
@@ -36,6 +43,8 @@ mod RedeemRequest {
         src5: SRC5Component::Storage,
         #[substorage(v0)]
         erc721: ERC721Component::Storage,
+        #[substorage(v0)]
+        erc721_enumerable: ERC721EnumerableComponent::Storage,
         #[substorage(v0)]
         upgradeable: UpgradeableComponent::Storage,
         id_len: u256,
@@ -48,6 +57,8 @@ mod RedeemRequest {
     enum Event {
         #[flat]
         ERC721Event: ERC721Component::Event,
+        #[flat]
+        ERC721EnumerableEvent: ERC721EnumerableComponent::Event,
         #[flat]
         SRC5Event: SRC5Component::Event,
         #[flat]
