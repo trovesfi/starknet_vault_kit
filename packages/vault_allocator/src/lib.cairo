@@ -19,6 +19,7 @@ pub mod integration_interfaces {
     pub mod pragma;
     pub mod vesu_v1;
     pub mod vesu_v2;
+    pub mod extended;
 }
 
 pub mod periphery {
@@ -72,6 +73,11 @@ pub mod decoders_and_sanitizers {
     pub mod multiply_decoder_and_sanitizer {
         pub mod interface;
         pub mod multiply_decoder_and_sanitizer;
+    }
+
+    pub mod extended_exchange_decoder_and_sanitizer {
+        pub mod interface;
+        pub mod extended_exchange_decoder_and_sanitizer;
     }
 }
 
