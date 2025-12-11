@@ -1,0 +1,2 @@
+overrides:
+  sdk-ts-1: link:../sdk-ts-1

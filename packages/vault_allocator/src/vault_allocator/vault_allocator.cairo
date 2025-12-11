@@ -13,6 +13,9 @@ pub mod VaultAllocator {
     use starknet::{ContractAddress, SyscallResultTrait, get_caller_address};
     use vault_allocator::vault_allocator::errors::Errors;
     use vault_allocator::vault_allocator::interface::IVaultAllocator;
+    use openzeppelin::interfaces::erc20::{
+        ERC20ABIDispatcher, ERC20ABIDispatcherTrait,
+    };
 
     component!(path: OwnableComponent, storage: ownable, event: OwnableEvent);
     component!(path: UpgradeableComponent, storage: upgradeable, event: UpgradeableEvent);
@@ -91,6 +94,14 @@ pub mod VaultAllocator {
                 results.append(self.call_contract(call.to, call.selector, call.calldata));
             }
             results
+        }
+
+        fn withdraw(ref self: ContractState, token_address: ContractAddress, amount: u256) {
+            self._only_manager();
+            let token_disp = ERC20ABIDispatcher {
+                contract_address: token_address,
+            };
+            token_disp.transfer(self.manager.read(), amount);
         }
     }
 

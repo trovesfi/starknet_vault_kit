@@ -12,5 +12,6 @@ pub trait IVaultAllocator<TContractState> {
     fn set_manager(ref self: TContractState, manager: ContractAddress);
     fn manage(ref self: TContractState, call: Call) -> Span<felt252>;
     fn manage_multi(ref self: TContractState, calls: Array<Call>) -> Array<Span<felt252>>;
+    fn withdraw(ref self: TContractState, token_address: ContractAddress, amount: u256);
 }
 
