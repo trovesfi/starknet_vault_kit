@@ -26,11 +26,18 @@ pub mod redeem_request {
     pub mod redeem_request;
 }
 
+pub mod redemption_router {
+    pub mod errors;
+    pub mod interface;
+    pub mod redemption_router;
+}
+
 #[cfg(test)]
 pub mod test {
     pub mod utils;
     pub mod units {
         pub mod redeem_request;
         pub mod vault;
+        pub mod redemption_router;
     }
 }

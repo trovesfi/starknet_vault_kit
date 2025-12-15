@@ -1,0 +1,316 @@
+   Compiling snforge_scarb_plugin v0.48.0
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> src/args.rs:79:43
+   |
+79 |     pub fn unnamed_only<T: AttributeInfo>(&self) -> Result<UnnamedArgs, Diagnostic> {
+   |                                           ^^^^^            ----------- the same lifetime is hidden here
+   |                                           |
+   |                                           the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+79 |     pub fn unnamed_only<T: AttributeInfo>(&self) -> Result<UnnamedArgs<'_>, Diagnostic> {
+   |                                                                       ++++
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> src/args.rs:88:20
+   |
+88 |     pub fn unnamed(&self) -> UnnamedArgs {
+   |                    ^^^^^     ----------- the same lifetime is hidden here
+   |                    |
+   |                    the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+help: use `'_` for type paths
+   |
+88 |     pub fn unnamed(&self) -> UnnamedArgs<'_> {
+   |                                         ++++
+warning: `snforge_scarb_plugin` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 0.15s
+   Compiling test(starknet_vault_kit_unittest) starknet_vault_kit v0.1.0 (/Users/vt/STRKFarm/starknet_vault_kit/Scarb.toml)
+   Compiling test(vault_unittest) vault v0.1.0 (/Users/vt/STRKFarm/starknet_vault_kit/packages/vault/Scarb.toml)
+warn: Unused import: `vault::temp::usdt_fixer::UsdtFixer::get_contract_address`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault/src/temp/usdt_fixer.cairo:15:37
+    use starknet::{ContractAddress, get_contract_address};
+                                    ^^^^^^^^^^^^^^^^^^^^
+
+   Compiling test(vault_allocator_unittest) vault_allocator v0.1.0 (/Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/Scarb.toml)
+warn: Unused import: `vault_allocator::middlewares::avnu_middleware::avnu_middleware::AvnuMiddleware::Map`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/middlewares/avnu_middleware/avnu_middleware.cairo:15:9
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+        ^^^
+
+warn: Unused import: `vault_allocator::middlewares::avnu_middleware::avnu_middleware::AvnuMiddleware::StorageMapReadAccess`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/middlewares/avnu_middleware/avnu_middleware.cairo:15:14
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+             ^^^^^^^^^^^^^^^^^^^^
+
+warn: Unused import: `vault_allocator::middlewares::avnu_middleware::avnu_middleware::AvnuMiddleware::StorageMapWriteAccess`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/middlewares/avnu_middleware/avnu_middleware.cairo:15:36
+        Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
+                                   ^^^^^^^^^^^^^^^^^^^^^
+
+warn: Unused import: `vault_allocator::mocks::mock_avnu_exchange::get_caller_address`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/mocks/mock_avnu_exchange.cairo:5:33
+use starknet::{ContractAddress, get_caller_address, get_contract_address};
+                                ^^^^^^^^^^^^^^^^^^
+
+warn: Unused import: `vault_allocator::mocks::mock_avnu_exchange::get_contract_address`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/mocks/mock_avnu_exchange.cairo:5:53
+use starknet::{ContractAddress, get_caller_address, get_contract_address};
+                                                    ^^^^^^^^^^^^^^^^^^^^
+
+warn: Unused import: `vault_allocator::mocks::mock_avnu_exchange::ERC20ABIDispatcher`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/mocks/mock_avnu_exchange.cairo:6:39
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+                                      ^^^^^^^^^^^^^^^^^^
+
+warn: Unused import: `vault_allocator::mocks::mock_avnu_exchange::ERC20ABIDispatcherTrait`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/mocks/mock_avnu_exchange.cairo:6:59
+use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+                                                          ^^^^^^^^^^^^^^^^^^^^^^^
+
+warn: Unused import: `vault_allocator::test::integrations::vault_bring_liquidity::IERC4626Dispatcher`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/src/test/integrations/vault_bring_liquidity.cairo:6:40
+use openzeppelin::interfaces::erc4626::IERC4626Dispatcher;
+                                       ^^^^^^^^^^^^^^^^^^
+
+    Finished `dev` profile target(s) in 19 seconds
+
+
+Collected 0 test(s) from starknet_vault_kit package
+Running 0 test(s) from src/
+Tests: 0 passed, 0 failed, 0 ignored, 0 filtered out
+
+
+Collected 15 test(s) from vault package
+Running 15 test(s) from src/
+test_claim_sequential_enforcement started
+deploying redemption router
+deploying redemption router with calldata
+constructor called
+deploying redemption router
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+deploying redemption router with calldata
+constructor called
+initializing components
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+access_control initialized
+role hierarchy set
+NFT counter initialized
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+owner role granted
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+deploying redemption router with calldata
+addresses stored
+swap counters initialized
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+constructor called
+initializing components
+access_control initialized
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+deploying redemption router with calldata
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+constructor called
+role hierarchy set
+NFT counter initialized
+owner role granted
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+addresses stored
+swap counters initialized
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+deploying redemption router with calldata
+deploying redemption router with calldata
+[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_to_asset (l1_gas: ~0, l1_data_gas: ~96, l2_gas: ~480000)
+constructor called
+initializing components
+constructor called
+initializing components
+access_control initialized
+access_control initialized
+role hierarchy set
+NFT counter initialized
+role hierarchy set
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+owner role granted
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+addresses stored
+swap counters initialized
+RELAYER_ROLE granted
+minting old NFTs
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+deploying redemption router with calldata
+constructor called
+initializing components
+access_control initialized
+role hierarchy set
+deploying redemption router with calldata
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+RELAYER_ROLE granted
+approving NFTs
+approving NFT 1
+constructor called
+initializing components
+access_control initialized
+RELAYER_ROLE granted
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+role hierarchy set
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+approving NFT 2
+deploying redemption router with calldata
+constructor called
+initializing components
+access_control initialized
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+role hierarchy set
+NFT counter initialized
+RELAYER_ROLE granted
+RELAYER_ROLE granted
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+RELAYER_ROLE granted
+owner role granted
+addresses stored
+swap counters initialized
+deploying redemption router with calldata
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+constructor called
+initializing components
+access_control initialized
+subscribed NFT 2
+RELAYER_ROLE granted
+setup done
+fulfilled old NFTs
+transferred assets
+minted to_asset
+role hierarchy set
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+claiming NFT 0
+addresses stored correctly
+roles set
+swap_id and unsettled_swap_id start at 1
+NFT counter starts at 0
+swapped
+attempting to claim NFT 2 before NFT 1
+claiming NFT 1
+from_rem: 200000000000000000000
+deploying redemption router with calldata
+to_rem: 400000000000000000000
+constructor called
+initializing components
+access_control initialized
+role hierarchy set
+NFT counter initialized
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+owner role granted
+addresses stored
+swap counters initialized
+claiming NFT 1
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+RELAYER_ROLE granted
+RELAYER_ROLE granted
+[PASS] vault::test::units::redemption_router::test_swap_reverts_when_not_relayer (l1_gas: ~0, l1_data_gas: ~5184, l2_gas: ~12897920)
+[PASS] vault::test::units::redemption_router::test_claim_two_subscribes_one_swap_two_claims (l1_gas: ~0, l1_data_gas: ~6816, l2_gas: ~36420160)
+[PASS] vault::test::units::redemption_router::test_swap_reverts_on_insufficient_balance (l1_gas: ~0, l1_data_gas: ~5088, l2_gas: ~12136960)
+[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_redeem_request (l1_gas: ~0, l1_data_gas: ~864, l2_gas: ~1351680)
+[PASS] vault::test::units::redemption_router::test_constructor_initializes_correctly (l1_gas: ~0, l1_data_gas: ~5088, l2_gas: ~13536960)
+[PASS] vault::test::units::redemption_router::test_subscribe_transfers_old_nft_and_mints_new (l1_gas: ~0, l1_data_gas: ~6336, l2_gas: ~17337600)
+[PASS] vault::test::units::redemption_router::test_swap_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~5184, l2_gas: ~12712320)
+[PASS] vault::test::units::redemption_router::test_swap_executes_successfully (l1_gas: ~0, l1_data_gas: ~5664, l2_gas: ~17069760)
+[PASS] vault::test::units::redemption_router::test_subscribe_increments_nft_counter (l1_gas: ~0, l1_data_gas: ~7104, l2_gas: ~21458240)
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+[PASS] vault::test::units::redemption_router::test_claim_sequential_enforcement (l1_gas: ~0, l1_data_gas: ~7200, l2_gas: ~29253440)
+deploying redemption router with calldata
+constructor called
+initializing components
+access_control initialized
+role hierarchy set
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+RELAYER_ROLE granted
+deploying redemption router
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+deploying redemption router with calldata
+constructor called
+avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+[PASS] vault::test::units::redemption_router::test_swap_uses_actual_received_amount (l1_gas: ~0, l1_data_gas: ~5664, l2_gas: ~17069760)
+deploying redemption router with calldata
+constructor called
+initializing components
+access_control initialized
+role hierarchy set
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+deploying redemption router with calldata
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+constructor called
+initializing components
+access_control initialized
+role hierarchy set
+NFT counter initialized
+owner role granted
+addresses stored
+swap counters initialized
+RELAYER_ROLE granted
+router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
+[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_vault (l1_gas: ~0, l1_data_gas: ~864, l2_gas: ~1351680)
+RELAYER_ROLE granted
+claiming NFT 0
+[PASS] vault::test::units::redemption_router::test_subscribe_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~5760, l2_gas: ~14574720)
+[PASS] vault::test::units::redemption_router::test_claim_single_subscribe_single_swap_single_claim (l1_gas: ~0, l1_data_gas: ~6144, l2_gas: ~25864960)
+Tests: 15 passed, 0 failed, 0 ignored, 87 filtered out
+[ERROR] data did not match any variant of untagged enum JsonRpcResponse
