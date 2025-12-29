@@ -90,9 +90,8 @@ pub mod RedemptionRouter {
         epoch_redeem_assets: Map<u256, u256>, // epoch -> snapshot of redeem_assets at subscribe time
         epoch_redeem_nominal: Map<u256, u256>, // epoch -> snapshot of redeem_nominal at subscribe time
         epoch_wise_nominals: Map<u256, u256>, // epoch -> from_amount (nominal amount subscribed for this epoch)
-        epoch_settled_amounts: Map<u256, u256>, // epoch -> actual settled from_amount received
+        epoch_settled_amounts: Map<u256, u256>, // epoch -> actual settled (i.e. swapped) from_amount
         last_settled_epoch: u256, // Highest epoch number that has been fully settled (may not be sequential if some epochs have no subscriptions)
-        old_nft_fulfilled: Map<u256, bool>, // old_nft_id -> whether the old NFT has been fulfilled (burned)
 
         min_subscribe_amount: u256,
     }
@@ -119,15 +118,21 @@ pub mod RedemptionRouter {
 
     #[derive(Drop, starknet::Event)]
     pub struct Subscribed {
+        #[key]
         pub new_nft_id: u256,
+        #[key]
         pub old_nft_id: u256,
+        #[key]
         pub receiver: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Unsubscribed {
+        #[key]
         pub new_nft_id: u256,
+        #[key]
         pub old_nft_id: u256,
+        #[key]
         pub owner: ContractAddress,
         pub is_old_nft_returned: bool, // true if old NFT returned as is
         pub is_original_assets_returned: bool, // true if original assets returned proportional to user's share
@@ -136,6 +141,7 @@ pub mod RedemptionRouter {
 
     #[derive(Drop, starknet::Event)]
     pub struct Swapped {
+        #[key]
         pub swap_id: u256,
         pub from_amount: u256,
         pub to_amount: u256,
@@ -144,10 +150,13 @@ pub mod RedemptionRouter {
 
     #[derive(Drop, starknet::Event)]
     pub struct Claimed {
+        #[key]
         pub new_nft_id: u256,
+        #[key]
         pub old_nft_id: u256,
-        pub receivable: u256,
+        #[key]
         pub swap_id: u256,
+        pub receivable: u256,
     }
 
     #[constructor]
@@ -384,11 +393,18 @@ pub mod RedemptionRouter {
         ) -> u256 {
             // Get the vault's current epoch to know the upper bound
             let vault_dispatcher = IVaultDispatcher { contract_address: self.vault.read() };
-            let max_epoch = vault_dispatcher.handled_epoch_len() - 1; // -1 because we are using 0-indexed epochs
+            let handled_epoch_len = vault_dispatcher.handled_epoch_len();
+            
+            // If no epochs have been handled yet, return early
+            if (handled_epoch_len == 0) {
+                return self.last_settled_epoch.read();
+            }
+            
+            let max_epoch = handled_epoch_len - 1; // -1 because we are using 0-indexed epochs
             
             // Start from last_settled_epoch + 1 to avoid re-checking already settled epochs
             let last_settled_epoch = self.last_settled_epoch.read();
-            let mut current_epoch = last_settled_epoch + 1;
+            let mut current_epoch = if last_settled_epoch == 0 { 0 } else { last_settled_epoch + 1 };
             let mut highest_settled_epoch: u256 = last_settled_epoch;
             let mut epochs_checked: u256 = 0;
             
@@ -425,16 +441,15 @@ pub mod RedemptionRouter {
                 );
                 
                 let already_settled = self.epoch_settled_amounts.read(current_epoch);
-                let remaining_to_settle = expected_settled - already_settled;
-                
-                // Skip if epoch is already fully settled
-                if (remaining_to_settle == 0) {
+                // Check if epoch is already fully settled (handle case where already_settled >= expected_settled)
+                if (already_settled >= expected_settled) {
                     if (current_epoch > highest_settled_epoch) {
                         highest_settled_epoch = current_epoch;
                     }
                     current_epoch = current_epoch + 1;
                     continue;
                 }
+                let remaining_to_settle = expected_settled - already_settled;
                 
                 let settle_amount = if (remaining_from >= remaining_to_settle) {
                     remaining_to_settle
@@ -454,6 +469,46 @@ pub mod RedemptionRouter {
                     current_epoch = current_epoch + 1;
                 } else {
                     // Epoch partially settled, stop here (don't move to next epoch)
+                    break;
+                }
+            }
+            
+            // Phase 2: Sync epochs (check which epochs are already fully settled)
+            // This is needed when sync_settled_epochs is called separately after swaps
+            while (current_epoch <= max_epoch) {
+                epochs_checked = epochs_checked + 1;
+                // designed to prevent excessive gas usage
+                if (!check_all && epochs_checked > max_epochs_to_check) {
+                    break;
+                }
+
+                let epoch_nominal = self.epoch_redeem_nominal.read(current_epoch);
+                
+                // Skip epochs without subscriptions
+                if (epoch_nominal == 0) {
+                    current_epoch = current_epoch + 1;
+                    continue;
+                }
+                
+                // Check if epoch is already fully settled
+                let effective_offset = self._get_effective_offset_factor(current_epoch);
+                let expected_settled = math::u256_mul_div(
+                    epoch_nominal,
+                    effective_offset,
+                    WAD,
+                    math::Rounding::Floor
+                );
+                
+                let already_settled = self.epoch_settled_amounts.read(current_epoch);
+                
+                // If epoch is fully settled, update highest_settled_epoch
+                if (already_settled >= expected_settled && expected_settled > 0) {
+                    if (current_epoch > highest_settled_epoch) {
+                        highest_settled_epoch = current_epoch;
+                    }
+                    current_epoch = current_epoch + 1;
+                } else {
+                    // Epoch not fully settled, stop here
                     break;
                 }
             }
@@ -683,8 +738,6 @@ pub mod RedemptionRouter {
             
             // Transfer original NFT from caller to this contract
             self._transfer_original_nft(nft_id: nft_id, from_address: caller, to_address: get_contract_address());
-            // Mark old NFT as not fulfilled yet (router owns it now)
-            self.old_nft_fulfilled.write(nft_id, false);
 
             // Mint new NFT to receiver
             let new_nft_id = self.nft_id_counter.read();
@@ -781,7 +834,7 @@ pub mod RedemptionRouter {
             }
             to_asset_dispatcher.transfer(owner, total_to);
 
-            self.emit(Claimed { new_nft_id: nft_id, old_nft_id: request_info.old_nft_id, receivable: total_to, swap_id: self.unsettled_swap_id.read() });
+            self.emit(Claimed { new_nft_id: nft_id, old_nft_id: request_info.old_nft_id, swap_id: self.unsettled_swap_id.read(), receivable: total_to });
 
             total_to
         }
@@ -856,6 +909,10 @@ pub mod RedemptionRouter {
         fn set_epoch_offset(ref self: ContractState, epoch: u256, offset_factor: u256) {
             self.access_control.assert_only_role(RELAYER_ROLE);
             self.epoch_offset_factor.write(epoch, offset_factor);
+        }
+
+        fn get_epoch_offset(self: @ContractState, epoch: u256) -> u256 {
+            self.epoch_offset_factor.read(epoch)
         }
 
         fn report(ref self: ContractState, new_aum: u256) {

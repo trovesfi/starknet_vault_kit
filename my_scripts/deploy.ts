@@ -328,6 +328,7 @@ async function deployUsdtFixer() {
 
 async function deployRedemptionRouter() {
     const provider = config.provider;
+    // ! set strategy
     const strategy = HyperLSTStrategies.find(u => u.name.includes('xWBTC'))!;
     const calls = await Deployer.prepareMultiDeployContracts([{
         contract_name: 'RedemptionRouter',
@@ -336,10 +337,12 @@ async function deployRedemptionRouter() {
             OWNER,
             strategy.additionalInfo.vaultAddress.address,
             strategy.additionalInfo.redeemRequestNFT.address,
+            // ! set to_asset
             Global.getDefaultTokens().find(t => t.symbol === 'WBTC')?.address!,
             "0x04270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f",
             OWNER,
             "0",
+            uint256.bnToUint256(0) // min subscribe amount
         ]
     }], config, acc);
     await Deployer.executeDeployCalls(calls, acc, provider);
@@ -400,7 +403,7 @@ if (require.main === module) {
 
     // deployStrategy();
     // deployAUMOracle("0x437ef1e7d0f100b2e070b7a65cafec0b2be31b0290776da8b4112f5473d8d9")
-    const strategy = HyperLSTStrategies.find(u => u.name.includes('xSTRK'))!;
+    const strategy = HyperLSTStrategies.find(u => u.name.includes('xWBTC'))!;
     // const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
     const vaultStrategy = new UniversalLstMultiplierStrategy(config, pricer, strategy);
     const vaultContracts = {
@@ -437,7 +440,7 @@ if (require.main === module) {
         // const netAPY = await vaultStrategy.netAPY();
         // console.log(netAPY);
     }
-    setConfig();
+    // setConfig();
     // configurePriceRouter();
     // deployPriceRouter();
     // deployAvnuMiddleware();
@@ -447,7 +450,7 @@ if (require.main === module) {
     //     asset: u.depositTokens[0].address.address
     // })))
     // deploySanitizer();
-    // upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
+    upgrade('RedemptionRouter', VAULT_PACKAGE, '0x6ea649f402898f69baf775c1afdd08522c071c640b9c4460192070ec2b96417');
     // grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), '0x2edf4edbed3f839e7f07dcd913e92299898ff4cf0ba532f8c572c66c5b331b2')
     // setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
 }

@@ -16,11 +16,11 @@
   "dependencies": {
     "@ericnordelo/strk-merkle-tree": "^1.0.0",
     "@noble/curves": "^2.0.0",
-    "@strkfarm/sdk": "link:../../sdk-ts",
+    "@strkfarm/sdk": "^1.2.0",
     "axios": "^1.12.2",
     "dotenv": "^17.2.1",
     "react": "^19.1.1",
-    "starknet": "8.5.3"
+    "starknet": "9.2.1"
   },
   "devDependencies": {
     "@types/node": "^24.3.1",

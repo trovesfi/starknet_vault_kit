@@ -27,13 +27,21 @@ help: use `'_` for type paths
 88 |     pub fn unnamed(&self) -> UnnamedArgs<'_> {
    |                                         ++++
 warning: `snforge_scarb_plugin` (lib) generated 2 warnings
-    Finished `release` profile [optimized] target(s) in 0.15s
+    Finished `release` profile [optimized] target(s) in 1.41s
    Compiling test(starknet_vault_kit_unittest) starknet_vault_kit v0.1.0 (/Users/vt/STRKFarm/starknet_vault_kit/Scarb.toml)
    Compiling test(vault_unittest) vault v0.1.0 (/Users/vt/STRKFarm/starknet_vault_kit/packages/vault/Scarb.toml)
-warn: Unused import: `vault::temp::usdt_fixer::UsdtFixer::get_contract_address`
- --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault/src/temp/usdt_fixer.cairo:15:37
-    use starknet::{ContractAddress, get_contract_address};
-                                    ^^^^^^^^^^^^^^^^^^^^
+warn: Unused import: `vault::test::units::redemption_router::Zero`
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault/src/test/units/redemption_router.cairo:11:24
+use core::num::traits::Zero;
+                       ^^^^
+
+warn[E0001]: Unused variable. Consider ignoring by prefixing with `_`.
+ --> /Users/vt/STRKFarm/starknet_vault_kit/packages/vault/src/test/units/redemption_router.cairo:854:9
+    let due_amount: u256 = WAD * 100;
+        ^^^^^^^^^^
+note: this error originates in the attribute macro: `test`
+note: this error originates in the attribute macro: `should_panic`
+note: this error originates in the attribute macro: `__internal_config_statement`
 
    Compiling test(vault_allocator_unittest) vault_allocator v0.1.0 (/Users/vt/STRKFarm/starknet_vault_kit/packages/vault_allocator/Scarb.toml)
 warn: Unused import: `vault_allocator::middlewares::avnu_middleware::avnu_middleware::AvnuMiddleware::Map`
@@ -84,233 +92,250 @@ Running 0 test(s) from src/
 Tests: 0 passed, 0 failed, 0 ignored, 0 filtered out
 
 
-Collected 15 test(s) from vault package
-Running 15 test(s) from src/
-test_claim_sequential_enforcement started
+Collected 27 test(s) from vault package
+Running 27 test(s) from src/
+deploying redemption router
 deploying redemption router
 deploying redemption router with calldata
-constructor called
-deploying redemption router
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
-avnu_exchange deployed
-integrator_fee_recipient and integrator_fee_amount_bps set
-deploying redemption router
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
-avnu_exchange deployed
-integrator_fee_recipient and integrator_fee_amount_bps set
-deploying redemption router
 deploying redemption router with calldata
-constructor called
-initializing components
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
-access_control initialized
-role hierarchy set
-NFT counter initialized
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
-owner role granted
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
 deploying redemption router with calldata
-addresses stored
-swap counters initialized
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
-constructor called
-initializing components
-access_control initialized
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
-avnu_exchange deployed
-deploying redemption router with calldata
-integrator_fee_recipient and integrator_fee_amount_bps set
-deploying redemption router
-constructor called
-role hierarchy set
-NFT counter initialized
-owner role granted
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
-addresses stored
-swap counters initialized
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
-avnu_exchange deployed
-integrator_fee_recipient and integrator_fee_amount_bps set
-deploying redemption router
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-deploying redemption router with calldata
-deploying redemption router with calldata
-[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_to_asset (l1_gas: ~0, l1_data_gas: ~96, l2_gas: ~480000)
-constructor called
-initializing components
-constructor called
-initializing components
-access_control initialized
-access_control initialized
-role hierarchy set
-NFT counter initialized
-role hierarchy set
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
-owner role granted
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-addresses stored
-swap counters initialized
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
 RELAYER_ROLE granted
-minting old NFTs
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
 deploying redemption router with calldata
-constructor called
-initializing components
-access_control initialized
-role hierarchy set
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
 deploying redemption router with calldata
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
-RELAYER_ROLE granted
-approving NFTs
-approving NFT 1
-constructor called
-initializing components
-access_control initialized
-RELAYER_ROLE granted
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-role hierarchy set
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
-approving NFT 2
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_vault (l1_gas: ~0, l1_data_gas: ~864, l2_gas: ~1351680)
+[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_redeem_request (l1_gas: ~0, l1_data_gas: ~864, l2_gas: ~1351680)
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
 deploying redemption router with calldata
-constructor called
-initializing components
-access_control initialized
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-role hierarchy set
-NFT counter initialized
-RELAYER_ROLE granted
-RELAYER_ROLE granted
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
 RELAYER_ROLE granted
-owner role granted
-addresses stored
-swap counters initialized
+RELAYER_ROLE granted
 deploying redemption router with calldata
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-constructor called
-initializing components
-access_control initialized
-subscribed NFT 2
+deploying redemption router with calldata
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+RELAYER_ROLE granted
+deploying redemption router with calldata
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+RELAYER_ROLE granted
+RELAYER_ROLE granted
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+deploying redemption router with calldata
+deploying redemption router with calldata
+deploying redemption router
+RELAYER_ROLE granted
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+RELAYER_ROLE granted
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+RELAYER_ROLE granted
+[PASS] vault::test::units::redemption_router::test_sync_settled_epochs_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~7584, l2_gas: ~16323200)
+deploying redemption router with calldata
+[PASS] vault::test::units::redemption_router::test_unsubscribe_twice_reverts (l1_gas: ~0, l1_data_gas: ~9120, l2_gas: ~29808960)
+[PASS] vault::test::units::redemption_router::test_set_min_subscribe_amount_only_owner (l1_gas: ~0, l1_data_gas: ~7584, l2_gas: ~15947840)
+[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_to_asset (l1_gas: ~0, l1_data_gas: ~96, l2_gas: ~520000)
+[FAIL] vault::test::units::redemption_router::test_unsubscribe_original_nft_fulfilled_but_not_swapped_returns_assets
+
+Failure data:
+    0x557365722073686f756c6420726563656976652066726f6d5f617373657473 ('User should receive from_assets')
+
+[PASS] vault::test::units::redemption_router::test_unsubscribe_second_user_before_swaps (l1_gas: ~0, l1_data_gas: ~9792, l2_gas: ~41260160)
+[PASS] vault::test::units::redemption_router::test_claim_requires_epoch_settled (l1_gas: ~0, l1_data_gas: ~9600, l2_gas: ~40604160)
+[PASS] vault::test::units::redemption_router::test_unsubscribe_original_nft_not_fulfilled_returns_nft (l1_gas: ~0, l1_data_gas: ~9120, l2_gas: ~30208960)
+[FAIL] vault::test::units::redemption_router::test_claim_two_subscribes_one_swap_two_claims
+
+Failure data:
+    "Claim not allowed"
+
+
+    "Claim not allowed"
+
+note: run with `SNFORGE_BACKTRACE=1` environment variable to display a backtrace
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+deploying redemption router with calldata
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+deploying redemption router with calldata
+RELAYER_ROLE granted
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+[PASS] vault::test::units::redemption_router::test_unsubscribe_third_user_after_second_withdrawn (l1_gas: ~0, l1_data_gas: ~10368, l2_gas: ~54841280)
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+RELAYER_ROLE granted
+deploying redemption router with calldata
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+RELAYER_ROLE granted
+deploying redemption router
+deploying redemption router with calldata
+deploying redemption router with calldata
+[PASS] vault::test::units::redemption_router::test_swap_executes_successfully (l1_gas: ~0, l1_data_gas: ~8064, l2_gas: ~21170880)
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+deploying redemption router with calldata
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+deploying redemption router with calldata
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+deploying redemption router with calldata
+RELAYER_ROLE granted
+RELAYER_ROLE granted
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+RELAYER_ROLE granted
+[PASS] vault::test::units::redemption_router::test_swap_reverts_when_not_relayer (l1_gas: ~0, l1_data_gas: ~7584, l2_gas: ~16588800)
+RELAYER_ROLE granted
+deploying redemption router with calldata
+RELAYER_ROLE granted
+deploying redemption router with calldata
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+[PASS] vault::test::units::redemption_router::test_subscribe_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~8640, l2_gas: ~23504960)
+RELAYER_ROLE granted
+RELAYER_ROLE granted
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+[PASS] vault::test::units::redemption_router::test_swap_uses_actual_received_amount (l1_gas: ~0, l1_data_gas: ~8064, l2_gas: ~21130880)
+[FAIL] vault::test::units::redemption_router::test_subscribe_transfers_old_nft_and_mints_new
+
+Failure data:
+    0x44756520616d6f756e742073746f72656420696e636f72726563746c79 ('Due amount stored incorrectly')
+
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+deploying redemption router
+deploying redemption router with calldata
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+RELAYER_ROLE granted
+deploying redemption router with calldata
+[PASS] vault::test::units::redemption_router::test_subscribe_reverts_on_too_small_amount (l1_gas: ~0, l1_data_gas: ~8448, l2_gas: ~23368640)
+[FAIL] vault::test::units::redemption_router::test_claim_single_subscribe_single_swap_single_claim
+
+Failure data:
+    "Claim not allowed"
+
+
+    "Claim not allowed"
+
+note: run with `SNFORGE_BACKTRACE=1` environment variable to display a backtrace
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+[FAIL] vault::test::units::redemption_router::test_unsubscribe_original_nft_fulfilled_partially_swapped_reverts
+
+Failure data:
+    Expected to panic, but no panic occurred
+    Expected panic data:  [0x46a6158a16a947e5916b2a2ca68501a45e93d7110e81aa2d6438b1c57c879a3, 0x1, 0x43616e6e6f7420756e7375627363726962653a207377617073206861766520, 0x7061727469616c6c7920636f6e73756d656420617373657473, 0x19] (, , Cannot unsubscribe: swaps have , partially consumed assets, )
+
 RELAYER_ROLE granted
 setup done
-fulfilled old NFTs
-transferred assets
-minted to_asset
-role hierarchy set
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
-claiming NFT 0
+[PASS] vault::test::units::redemption_router::test_swap_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~7584, l2_gas: ~16443200)
 addresses stored correctly
 roles set
 swap_id and unsettled_swap_id start at 1
 NFT counter starts at 0
-swapped
-attempting to claim NFT 2 before NFT 1
-claiming NFT 1
-from_rem: 200000000000000000000
-deploying redemption router with calldata
-to_rem: 400000000000000000000
-constructor called
-initializing components
-access_control initialized
-role hierarchy set
-NFT counter initialized
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-owner role granted
-addresses stored
-swap counters initialized
-claiming NFT 1
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-RELAYER_ROLE granted
-RELAYER_ROLE granted
-[PASS] vault::test::units::redemption_router::test_swap_reverts_when_not_relayer (l1_gas: ~0, l1_data_gas: ~5184, l2_gas: ~12897920)
-[PASS] vault::test::units::redemption_router::test_claim_two_subscribes_one_swap_two_claims (l1_gas: ~0, l1_data_gas: ~6816, l2_gas: ~36420160)
-[PASS] vault::test::units::redemption_router::test_swap_reverts_on_insufficient_balance (l1_gas: ~0, l1_data_gas: ~5088, l2_gas: ~12136960)
-[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_redeem_request (l1_gas: ~0, l1_data_gas: ~864, l2_gas: ~1351680)
-[PASS] vault::test::units::redemption_router::test_constructor_initializes_correctly (l1_gas: ~0, l1_data_gas: ~5088, l2_gas: ~13536960)
-[PASS] vault::test::units::redemption_router::test_subscribe_transfers_old_nft_and_mints_new (l1_gas: ~0, l1_data_gas: ~6336, l2_gas: ~17337600)
-[PASS] vault::test::units::redemption_router::test_swap_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~5184, l2_gas: ~12712320)
-[PASS] vault::test::units::redemption_router::test_swap_executes_successfully (l1_gas: ~0, l1_data_gas: ~5664, l2_gas: ~17069760)
-[PASS] vault::test::units::redemption_router::test_subscribe_increments_nft_counter (l1_gas: ~0, l1_data_gas: ~7104, l2_gas: ~21458240)
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
-avnu_exchange deployed
-integrator_fee_recipient and integrator_fee_amount_bps set
-deploying redemption router
-[PASS] vault::test::units::redemption_router::test_claim_sequential_enforcement (l1_gas: ~0, l1_data_gas: ~7200, l2_gas: ~29253440)
-deploying redemption router with calldata
-constructor called
-initializing components
-access_control initialized
-role hierarchy set
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-RELAYER_ROLE granted
-deploying redemption router
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
 deploying redemption router with calldata
-constructor called
-avnu_address: 2974402149641590712284684492250344113565912102804890602759248512068283105355
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
+avnu_exchange deployed
+integrator_fee_recipient and integrator_fee_amount_bps set
+[PASS] vault::test::units::redemption_router::test_subscribe_increments_nft_counter (l1_gas: ~0, l1_data_gas: ~9792, l2_gas: ~37530240)
+deploying redemption router
+RELAYER_ROLE granted
+avnu_address: 1628116951761910920870155251384136531213406409703273313579474904754020109217
 avnu_exchange deployed
 integrator_fee_recipient and integrator_fee_amount_bps set
 deploying redemption router
-[PASS] vault::test::units::redemption_router::test_swap_uses_actual_received_amount (l1_gas: ~0, l1_data_gas: ~5664, l2_gas: ~17069760)
+[FAIL] vault::test::units::redemption_router::test_unsubscribe_second_user_after_fulfillment_but_before_swaps
+
+Failure data:
+    0x55736572203220726563656976656420323030 ('User 2 received 200')
+
+[PASS] vault::test::units::redemption_router::test_constructor_initializes_correctly (l1_gas: ~0, l1_data_gas: ~7488, l2_gas: ~17427840)
 deploying redemption router with calldata
-constructor called
-initializing components
-access_control initialized
-role hierarchy set
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
 deploying redemption router with calldata
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-constructor called
-initializing components
-access_control initialized
-role hierarchy set
-NFT counter initialized
-owner role granted
-addresses stored
-swap counters initialized
+[PASS] vault::test::units::redemption_router::test_set_min_subscribe_amount_reverts_when_not_owner (l1_gas: ~0, l1_data_gas: ~7488, l2_gas: ~15787840)
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
 RELAYER_ROLE granted
-router: 1341007589477684026508707867424700544582605365157133884134555647548294500017
-[PASS] vault::test::units::redemption_router::test_constructor_reverts_zero_vault (l1_gas: ~0, l1_data_gas: ~864, l2_gas: ~1351680)
+router: 1621714980566236991272171700418711100308322164303330559391498409129115170949
 RELAYER_ROLE granted
-claiming NFT 0
-[PASS] vault::test::units::redemption_router::test_subscribe_reverts_when_paused (l1_gas: ~0, l1_data_gas: ~5760, l2_gas: ~14574720)
-[PASS] vault::test::units::redemption_router::test_claim_single_subscribe_single_swap_single_claim (l1_gas: ~0, l1_data_gas: ~6144, l2_gas: ~25864960)
-Tests: 15 passed, 0 failed, 0 ignored, 87 filtered out
+[PASS] vault::test::units::redemption_router::test_swap_reverts_on_insufficient_balance (l1_gas: ~0, l1_data_gas: ~7488, l2_gas: ~15867840)
+[FAIL] vault::test::units::redemption_router::test_sync_settled_epochs
+
+Failure data:
+    0x6c6173745f736574746c65645f65706f63682073686f756c642062652031 ('last_settled_epoch should be 1')
+
+Tests: 20 passed, 7 failed, 0 ignored, 87 filtered out
 [ERROR] data did not match any variant of untagged enum JsonRpcResponse

@@ -38,6 +38,7 @@ pub trait IRedemptionRouter<TContractState> {
     fn set_integrator_fee_recipient(ref self: TContractState, recipient: ContractAddress);
     fn set_integrator_fee_amount_bps(ref self: TContractState, fee_bps: u128);
     fn set_epoch_offset(ref self: TContractState, epoch: u256, offset_factor: u256);
+    fn get_epoch_offset(self: @TContractState, epoch: u256) -> u256;
     fn report(ref self: TContractState, new_aum: u256);
     fn set_min_subscribe_amount(ref self: TContractState, min_subscribe_amount: u256);
 

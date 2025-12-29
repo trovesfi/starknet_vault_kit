@@ -6,21 +6,24 @@ use openzeppelin::interfaces::accesscontrol::{
     IAccessControlDispatcher, IAccessControlDispatcherTrait,
 };
 use openzeppelin::interfaces::erc20::{ERC20ABIDispatcher, ERC20ABIDispatcherTrait};
+use openzeppelin::interfaces::erc4626::{IERC4626Dispatcher, IERC4626DispatcherTrait};
 use openzeppelin::interfaces::erc721::{ERC721ABIDispatcher, ERC721ABIDispatcherTrait};
 use snforge_std::{
     CheatSpan, ContractClassTrait, DeclareResultTrait, cheat_caller_address, declare,
-    start_mock_call, store, map_entry_address,
 };
-use starknet::ContractAddress;
+use starknet::{ContractAddress, get_block_timestamp};
 use core::array::ArrayTrait;
 use vault::redeem_request::interface::{
-    IRedeemRequestDispatcher, IRedeemRequestDispatcherTrait, RedeemRequestInfo,
+    IRedeemRequestDispatcher,
 };
 use vault::redemption_router::interface::{
     IRedemptionRouterDispatcher, IRedemptionRouterDispatcherTrait,
 };
 use vault::redemption_router::redemption_router::RedemptionRouter;
-use vault::test::utils::{OWNER, USER1, USER2, WAD, deploy_erc20_mock, deploy_redeem_request};
+use vault::test::utils::{OWNER, USER1, USER2, WAD, deploy_erc20_mock, deploy_redeem_request, deploy_vault, VAULT_ALLOCATOR, ORACLE};
+use snforge_std::start_cheat_block_timestamp_global;
+use vault::vault::interface::{IVaultDispatcher, IVaultDispatcherTrait};
+use vault::vault::vault::Vault;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;
 use vault_allocator::mocks::mock_avnu_exchange::IAvnuExchangeDispatcher;
 
@@ -70,17 +73,42 @@ fn deploy_mock_avnu_exchange() -> IAvnuExchangeDispatcher {
 }
 
 fn set_up() -> (
-    ContractAddress, // vault (dummy address)
+    IVaultDispatcher, // vault
     ContractAddress, // from_asset
     ContractAddress, // to_asset
     IRedeemRequestDispatcher, // redeem_request
     IAvnuExchangeDispatcher, // avnu_exchange
     IRedemptionRouterDispatcher, // router
 ) {
-    let dummy_vault = 'DUMMY_VAULT'.try_into().unwrap();
+
     let from_asset = deploy_erc20_mock();
     let to_asset = deploy_erc20_mock();
-    let redeem_request = deploy_redeem_request(dummy_vault);
+    let vault = deploy_vault(
+        from_asset
+    );
+    let vault_address = vault.contract_address;
+    
+    let redeem_request = deploy_redeem_request(vault_address);
+    // Register the deployed redeem_request with vault
+    cheat_caller_address(vault_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    vault.register_redeem_request(redeem_request.contract_address);
+    
+    // Register vault_allocator if needed
+    let vault_allocator = VAULT_ALLOCATOR();
+    cheat_caller_address(vault_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    vault.register_vault_allocator(vault_allocator);
+
+    // overwrite set fees
+    cheat_caller_address(vault_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    vault.set_fees_config(OWNER(), 0, 0, Vault::WAD / 10);
+    
+    // Grant ORACLE_ROLE to ORACLE for report calls
+    let access_control_vault = IAccessControlDispatcher {
+        contract_address: vault_address,
+    };
+    cheat_caller_address(vault_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    access_control_vault.grant_role(Vault::ORACLE_ROLE, ORACLE());
+    
     let avnu_exchange = deploy_mock_avnu_exchange();
     println!("avnu_exchange deployed");
     let integrator_fee_recipient = 'FEE_RECIPIENT'.try_into().unwrap();
@@ -88,11 +116,8 @@ fn set_up() -> (
     let min_subscribe_amount: u256 = 0; // No minimum by default for tests
     println!("integrator_fee_recipient and integrator_fee_amount_bps set");
     
-    // Mock vault's handled_epoch_len for constructor initialization
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 0_u256);
-    
     let router = deploy_redemption_router(
-        dummy_vault,
+        vault_address,
         redeem_request.contract_address,
         to_asset,
         avnu_exchange.contract_address,
@@ -112,37 +137,120 @@ fn set_up() -> (
     cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
     access_control.grant_role(selector!("PAUSER_ROLE"), OWNER());
     println!("RELAYER_ROLE granted");
-    (dummy_vault, from_asset, to_asset, redeem_request, avnu_exchange, router)
+
+    // to avoid zero liquidity error, seed some initial liquidity
+    let due_amount_1: u256 = WAD * 100;
+    mint_old_nft_to_user(vault, OWNER(), due_amount_1);
+
+    (vault, from_asset, to_asset, redeem_request, avnu_exchange, router)
 }
 
 fn mint_old_nft_to_user(
-    redeem_request: IRedeemRequestDispatcher, vault_address: ContractAddress, user: ContractAddress,
-    epoch: u256, nominal: u256,
+    vault: IVaultDispatcher, user: ContractAddress, nominal: u256,
 ) -> u256 {
-    let redeem_request_info = RedeemRequestInfo { epoch, nominal };
-    cheat_caller_address(
-        redeem_request.contract_address, vault_address, span: CheatSpan::TargetCalls(1),
-    );
-    redeem_request.mint(user, redeem_request_info)
+    // First, user needs to deposit assets to get vault shares
+    // Get asset address from vault
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    let asset_address = erc4626_dispatcher.asset();
+    
+    // Transfer underlying assets to user
+    let asset_dispatcher = ERC20ABIDispatcher { contract_address: asset_address };
+    cheat_caller_address(asset_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    asset_dispatcher.transfer(user, nominal);
+    
+    // User approves vault to spend assets
+    cheat_caller_address(asset_address, user, span: CheatSpan::TargetCalls(1));
+    asset_dispatcher.approve(vault.contract_address, nominal);
+    
+    // User deposits assets to get shares
+    cheat_caller_address(vault.contract_address, user, span: CheatSpan::TargetCalls(1));
+    let shares = erc4626_dispatcher.deposit(nominal, user);
+
+    shares
+}
+    
+fn mint_and_redeem_old_nft_to_user(
+    vault: IVaultDispatcher, user: ContractAddress, nominal: u256,
+) -> u256 {
+    let shares = mint_old_nft_to_user(vault, user, nominal);
+
+    // Call request_redeem on vault as if user is trying to withdraw
+    // Now call request_redeem as the user
+    cheat_caller_address(vault.contract_address, user, span: CheatSpan::TargetCalls(1));
+    vault.request_redeem(shares, user, user)
 }
 
+fn report(vault: IVaultDispatcher, from_asset: ContractAddress) {
+    // increase timestamp, else report fails
+    let now = get_block_timestamp();
+    start_cheat_block_timestamp_global(now + 3600); // 1 hour
+
+    // First, call report on vault to handle epochs
+    // Report needs ORACLE_ROLE
+    let oracle = ORACLE();
+    
+    // After report, if all epochs are handled, excess funds are sent to vault_allocator
+    // We need to mock bring_liquidity to get them back
+    let vault_allocator_addr = vault.vault_allocator();
+    // bring_liquidity transfers FROM caller TO vault
+    let asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
+    let allocator_balance = asset_dispatcher.balance_of(vault_allocator_addr);
+    if allocator_balance > 0 {
+        // Transfer funds from allocator back to vault (simulating bring_liquidity)
+        cheat_caller_address(from_asset, vault_allocator_addr, span: CheatSpan::TargetCalls(1));
+        asset_dispatcher.approve(vault.contract_address, allocator_balance);
+        
+        // Mock the bring_liquidity call to update vault state
+        cheat_caller_address(vault.contract_address, vault_allocator_addr, span: CheatSpan::TargetCalls(1));
+        vault.bring_liquidity(allocator_balance);
+    }
+
+    let handled_epoch_len = vault.handled_epoch_len();
+    println!("pre::handled_epoch_len: {}", handled_epoch_len);
+    let erc4626_dispatcher = IERC4626Dispatcher { contract_address: vault.contract_address };
+    println!("pre::total_assets: {}", erc4626_dispatcher.total_assets());
+    println!("pre::total_supply: {}", erc4626_dispatcher.total_assets());
+
+    // Call report as oracle
+    cheat_caller_address(vault.contract_address, oracle, span: CheatSpan::TargetCalls(1));
+    vault.report(0); // no assets in vault allocator
+    let handled_epoch_len = vault.handled_epoch_len();
+    println!("post::handled_epoch_len: {}", handled_epoch_len);
+    println!("post::total_assets: {}", erc4626_dispatcher.total_assets());
+    println!("post::total_supply: {}", erc4626_dispatcher.total_assets());
+    
+}
 fn fulfill_old_nft(
-    redeem_request: IRedeemRequestDispatcher, vault_address: ContractAddress, nft_id: u256,
+    vault: IVaultDispatcher, from_asset: ContractAddress, nft_id: u256,
 ) {
-    cheat_caller_address(
-        redeem_request.contract_address, vault_address, span: CheatSpan::TargetCalls(1),
-    );
-    redeem_request.burn(nft_id);
+    
+    report(vault, from_asset);
+    let asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
+
+    // Now claim_redeem on vault
+    // Get NFT owner first
+    let redeem_request_addr = vault.redeem_request();
+    let erc721_dispatcher = ERC721ABIDispatcher { contract_address: redeem_request_addr };
+    let nft_owner = erc721_dispatcher.owner_of(nft_id);
+
+    let owner_balance = asset_dispatcher.balance_of(nft_owner);
+    println!("owner_balance: {}", owner_balance);
+
+    // Call claim_redeem as the NFT owner
+    cheat_caller_address(vault.contract_address, nft_owner, span: CheatSpan::TargetCalls(1));
+    vault.claim_redeem(nft_id);
+    let owner_balance_after = asset_dispatcher.balance_of(nft_owner);
+    println!("owner_balance_after: {}", owner_balance_after);
 }
 
 fn mark_old_nft_fulfilled(router_address: ContractAddress, old_nft_id: u256) {
-    // Mark old NFT as fulfilled in router's storage
-    let mut cheat_calldata_key = ArrayTrait::new();
-    old_nft_id.serialize(ref cheat_calldata_key);
-    let mut cheat_calldata_value = ArrayTrait::new();
-    true.serialize(ref cheat_calldata_value);
-    let map_entry = map_entry_address(selector!("old_nft_fulfilled"), cheat_calldata_key.span());
-    store(router_address, map_entry, cheat_calldata_value.span());
+    // // Mark old NFT as fulfilled in router's storage
+    // let mut cheat_calldata_key = ArrayTrait::new();
+    // old_nft_id.serialize(ref cheat_calldata_key);
+    // let mut cheat_calldata_value = ArrayTrait::new();
+    // true.serialize(ref cheat_calldata_value);
+    // let map_entry = map_entry_address(selector!("old_nft_fulfilled"), cheat_calldata_key.span());
+    // store(router_address, map_entry, cheat_calldata_value.span());
 }
 
 // ============================================================================
@@ -151,11 +259,11 @@ fn mark_old_nft_fulfilled(router_address: ContractAddress, old_nft_id: u256) {
 
 #[test]
 fn test_constructor_initializes_correctly() {
-    let (dummy_vault, _, to_asset, redeem_request, avnu_exchange, router) = set_up();
+    let (vault, _, to_asset, redeem_request, avnu_exchange, router) = set_up();
     println!("setup done");
 
     // Verify addresses are stored correctly
-    assert(router.vault() == dummy_vault, 'Vault address incorrect');
+    assert(router.vault() == vault.contract_address, 'Vault address incorrect');
     assert(router.redeem_request() == redeem_request.contract_address, 'Redeem request incorrect');
     assert(router.to_asset() == to_asset, 'To asset incorrect');
     assert(router.avnu_exchange() == avnu_exchange.contract_address, 'Avnu exchange incorrect');
@@ -241,18 +349,12 @@ fn test_constructor_reverts_zero_to_asset() {
 
 #[test]
 fn test_subscribe_transfers_old_nft_and_mints_new() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
-    // Mint old NFT to user
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
-    let epoch: u256 = 1;
-    let nominal: u256 = 100;
-    let due_amount: u256 = WAD * nominal; // due_amount equals nominal in WAD
-
-    // Mock vault functions needed by subscribe
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * nominal); // Total redeem assets for epoch
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * nominal); // Total redeem nominal for epoch
+    // Mint old NFT to user by calling request_redeem on vault
+    let due_amount: u256 = WAD * 100; // due_amount equals nominal in WAD
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
+    let epoch: u256 = vault.epoch(); // Get current epoch from vault
 
     // User approves router
     let erc721_dispatcher = ERC721ABIDispatcher {
@@ -288,14 +390,11 @@ fn test_subscribe_transfers_old_nft_and_mints_new() {
 
 #[test]
 fn test_subscribe_increments_nft_counter() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
     // Subscribe first NFT
-    let old_nft_id_1 = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount_1: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_1);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id_1 = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount_1);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -307,12 +406,8 @@ fn test_subscribe_increments_nft_counter() {
     assert(new_nft_id_1 == 0, 'First NFT ID should be 0');
 
     // Subscribe second NFT
-    let old_nft_id_2 = mint_old_nft_to_user(redeem_request, dummy_vault, USER2(), 1, 200);
     let due_amount_2: u256 = WAD * 200;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_2);
-    // Note: redeem_assets and redeem_nominal should now include both users (300 total)
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 300);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 300);
+    let old_nft_id_2 = mint_and_redeem_old_nft_to_user(vault, USER2(), due_amount_2);
     
     cheat_caller_address(redeem_request.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_2);
@@ -324,18 +419,15 @@ fn test_subscribe_increments_nft_counter() {
 #[test]
 #[should_panic(expected: ('Pausable: paused',))]
 fn test_subscribe_reverts_when_paused() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
     // Pause contract
     cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
     router.pause();
 
     // Attempt subscribe
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -349,16 +441,15 @@ fn test_subscribe_reverts_when_paused() {
 #[test]
 #[should_panic(expected: "Too small subscribe amount")]
 fn test_subscribe_reverts_on_too_small_amount() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
     
     // Set min_subscribe_amount
     cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
     router.set_min_subscribe_amount(WAD * 100);
     
     // Attempt subscribe with amount below minimum
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 50); // 50 < 100
     let due_amount: u256 = WAD * 50;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount); // 50 < 100
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -375,13 +466,7 @@ fn test_subscribe_reverts_on_too_small_amount() {
 
 #[test]
 fn test_swap_executes_successfully() {
-    let (dummy_vault, from_asset, to_asset, _, avnu_exchange, router) = set_up();
-
-    // Mock vault asset and epoch functions
-    // handled_epoch_len must be at least 1 to avoid underflow (even if no epochs are handled)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 1_u256); // At least 1 to avoid underflow
-    start_mock_call(dummy_vault, selector!("epoch"), 0_u256); // Current epoch is 0
+    let (vault, from_asset, to_asset, _, avnu_exchange, router) = set_up();
 
     // Mint from_asset tokens to router
     let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
@@ -417,10 +502,7 @@ fn test_swap_executes_successfully() {
 #[test]
 #[should_panic(expected: "Insufficient from amount")]
 fn test_swap_reverts_on_insufficient_balance() {
-    let (dummy_vault, from_asset, _, _, _, router) = set_up();
-
-    // Mock vault asset
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
+    let (vault, from_asset, _, _, _, router) = set_up();
 
     // Don't mint any tokens to router (has 0 balance)
 
@@ -436,10 +518,7 @@ fn test_swap_reverts_on_insufficient_balance() {
 #[test]
 #[should_panic(expected: ('Caller is missing role',))]
 fn test_swap_reverts_when_not_relayer() {
-    let (dummy_vault, from_asset, _, _, _, router) = set_up();
-
-    // Mock vault asset
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
+    let (vault, from_asset, _, _, _, router) = set_up();
 
     // Mint tokens to router
     let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
@@ -458,14 +537,11 @@ fn test_swap_reverts_when_not_relayer() {
 #[test]
 #[should_panic(expected: ('Pausable: paused',))]
 fn test_swap_reverts_when_paused() {
-    let (dummy_vault, from_asset, _, _, _, router) = set_up();
+    let (vault, from_asset, _, _, _, router) = set_up();
 
     // Pause contract
     cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
     router.pause();
-
-    // Mock vault asset
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
 
     // Attempt swap
     let routes: Array<Route> = array![];
@@ -484,12 +560,7 @@ fn test_swap_reverts_when_paused() {
 
 #[test]
 fn test_swap_uses_actual_received_amount() {
-    let (dummy_vault, from_asset, to_asset, _, avnu_exchange, router) = set_up();
-
-    // Mock vault asset and epoch functions
-    // handled_epoch_len must be at least 1 to avoid underflow (even if no epochs are handled)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 1_u256); // At least 1 to avoid underflow
+    let (vault, from_asset, to_asset, _, avnu_exchange, router) = set_up();
 
     // Mint from_asset tokens to router
     let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
@@ -525,14 +596,11 @@ fn test_swap_uses_actual_received_amount() {
 
 #[test]
 fn test_claim_single_subscribe_single_swap_single_claim() {
-    let (dummy_vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
 
     // 1. Subscribe
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -543,7 +611,7 @@ fn test_claim_single_subscribe_single_swap_single_claim() {
     let new_nft_id = router.subscribe(old_nft_id, USER1());
 
     // 2. Fulfill old NFT (burn it)
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id);
+    fulfill_old_nft(vault, from_asset, old_nft_id);
 
     // 3. Transfer assets to router (simulate vault fulfilling redemption)
     let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
@@ -556,10 +624,6 @@ fn test_claim_single_subscribe_single_swap_single_claim() {
     to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 300);
 
     // 5. Swap
-    // handled_epoch_len should be 2 if epoch 1 is handled (epochs are 0-indexed, len is count)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256); // Epochs 0 and 1 handled
-    start_mock_call(dummy_vault, selector!("epoch"), 1_u256);
     let routes: Array<Route> = array![];
     let from_amount: u256 = WAD * 100;
     let min_amount_out: u256 = WAD * 200; // 2:1 ratio
@@ -588,66 +652,54 @@ fn test_claim_single_subscribe_single_swap_single_claim() {
 
 #[test]
 fn test_claim_two_subscribes_one_swap_two_claims() {
-    let (dummy_vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
 
     // 1. Two subscribes
-    let old_nft_id_1 = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
-    let old_nft_id_2 = mint_old_nft_to_user(redeem_request, dummy_vault, USER2(), 1, 200);
+    let due_amount_1: u256 = WAD * 100;
+    let old_nft_id_1 = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount_1);
+    let due_amount_2: u256 = WAD * 200;
+    let old_nft_id_2 = mint_and_redeem_old_nft_to_user(vault, USER2(), due_amount_2);
 
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
     };
 
-    // User 1 subscribes
-    let due_amount_1: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_1);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
-    
     cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_1);
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     let new_nft_id_1 = router.subscribe(old_nft_id_1, USER1());
 
-    // User 2 subscribes
-    let due_amount_2: u256 = WAD * 200;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_2);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 300); // Total for both users
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 300);
-    
     cheat_caller_address(redeem_request.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_2);
     cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     let new_nft_id_2 = router.subscribe(old_nft_id_2, USER2());
 
     // 2. Fulfill both old NFTs
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id_1);
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id_2);
+    fulfill_old_nft(vault, from_asset, old_nft_id_1);
+    fulfill_old_nft(vault, from_asset, old_nft_id_2);
+    println!("fulfilled 1");
 
-    // 3. Transfer assets to router
-    let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
-    cheat_caller_address(from_asset, OWNER(), span: CheatSpan::TargetCalls(1));
-    from_asset_dispatcher.transfer(router.contract_address, WAD * 300); // 300 tokens total
-
-    // 4. Mint to_asset to mock exchange
+    // 3. Mint to_asset to mock exchange
     let to_asset_dispatcher = ERC20ABIDispatcher { contract_address: to_asset };
     cheat_caller_address(to_asset, OWNER(), span: CheatSpan::TargetCalls(1));
     to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 1000);
+    println!("minted to_asset");
 
-    // 5. One swap: 300 from → 600 to (2:1 ratio)
-    // handled_epoch_len should be 2 if epoch 1 is handled (epochs are 0-indexed, len is count)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256); // Epochs 0 and 1 handled
-    start_mock_call(dummy_vault, selector!("epoch"), 1_u256);
+    // 4. One swap: 300 from → 600 to (2:1 ratio)
     let routes: Array<Route> = array![];
+    let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
+    let balance_from = from_asset_dispatcher.balance_of(router.contract_address);
+    println!("balance_from: {}", balance_from);
     cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
-    router.swap(routes, WAD * 300, WAD * 600);
+    router.swap(routes, balance_from, WAD * 600);
+    println!("swapped");
 
     // 6. Claim User 1: due = 100, should get 100 * 600 / 300 = 200
     // (no need to mock due_assets_from_id - it's stored in RequestInfo)
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     let receivable_1 = router.claim(new_nft_id_1);
     assert(receivable_1 == WAD * 200, 'User 1 receivable incorrect');
+    println!("claimed 1");
 
     // Verify swap info updated correctly
     let (from_rem, to_rem) = router.swap_info(1);
@@ -655,7 +707,7 @@ fn test_claim_two_subscribes_one_swap_two_claims() {
     println!("to_rem: {}", to_rem);
     assert(from_rem == WAD * 200, 'Remaining from_amount incorrect');
     assert(to_rem == WAD * 400, 'Remaining to_amount incorrect');
-
+    println!("claimed 2");
     // 7. Claim User 2: due = 200, should get 200 * 600 / 300 = 400
     // But since pool has remaining: 200 from, 400 to, user gets 400
     // (no need to mock due_assets_from_id - it's stored in RequestInfo)
@@ -671,14 +723,11 @@ fn test_claim_two_subscribes_one_swap_two_claims() {
 #[test]
 #[should_panic(expected: "Claim not allowed")]
 fn test_claim_requires_epoch_settled() {
-    let (dummy_vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
 
     // Subscribe to epoch 5
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 5, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -689,7 +738,7 @@ fn test_claim_requires_epoch_settled() {
     let new_nft_id = router.subscribe(old_nft_id, USER1());
 
     // Fulfill old NFT
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id);
+    fulfill_old_nft(vault, from_asset, old_nft_id);
 
     // Transfer assets and swap (but not enough to settle epoch 5)
     let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
@@ -699,11 +748,6 @@ fn test_claim_requires_epoch_settled() {
     let to_asset_dispatcher = ERC20ABIDispatcher { contract_address: to_asset };
     cheat_caller_address(to_asset, OWNER(), span: CheatSpan::TargetCalls(1));
     to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 1000);
-    
-    // handled_epoch_len should be 6 if epoch 5 is handled (epochs 0-5 are handled, len = 6)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 6_u256); // Epochs 0-5 handled
-    start_mock_call(dummy_vault, selector!("epoch"), 5_u256);
     
     let routes: Array<Route> = array![];
     cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
@@ -720,14 +764,11 @@ fn test_claim_requires_epoch_settled() {
 
 #[test]
 fn test_unsubscribe_original_nft_not_fulfilled_returns_nft() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
     // 1. Subscribe
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -759,14 +800,11 @@ fn test_unsubscribe_original_nft_not_fulfilled_returns_nft() {
 
 #[test]
 fn test_unsubscribe_original_nft_fulfilled_but_not_swapped_returns_assets() {
-    let (dummy_vault, from_asset, _, redeem_request, _, router) = set_up();
+    let (vault, from_asset, _, redeem_request, _, router) = set_up();
 
     // 1. Subscribe
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -777,29 +815,28 @@ fn test_unsubscribe_original_nft_fulfilled_but_not_swapped_returns_assets() {
     let new_nft_id = router.subscribe(old_nft_id, USER1());
 
     // 2. Fulfill old NFT (burn it)
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id);
+    fulfill_old_nft(vault, from_asset, old_nft_id);
     // Mark old NFT as fulfilled in router's storage
     mark_old_nft_fulfilled(router.contract_address, old_nft_id);
-
-    // 3. Transfer assets to router (simulate vault fulfilling redemption)
+    println!("old_nft_id: {}", old_nft_id);
     let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
-    cheat_caller_address(from_asset, OWNER(), span: CheatSpan::TargetCalls(1));
-    from_asset_dispatcher.transfer(router.contract_address, WAD * 100);
 
     // Get initial user balance
     let user_balance_before = from_asset_dispatcher.balance_of(USER1());
 
     // 4. Unsubscribe (original NFT fulfilled but not swapped)
     // Use unsubscribe_for_underlying since old NFT is fulfilled
-    // Mock vault functions needed by unsubscribe_for_underlying
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256);
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
     // Caller must own the NFT (USER1 already owns it)
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     router.unsubscribe_for_underlying(new_nft_id, USER1());
+    println!("new_nft_id: {}", new_nft_id);
 
     // Verify user received from_assets
     let user_balance_after = from_asset_dispatcher.balance_of(USER1());
+    println!("user_balance_before: {}", user_balance_before);
+    println!("user_balance_after: {}", user_balance_after);
+    let bal_remaining = ERC20ABIDispatcher { contract_address: from_asset }.balance_of(router.contract_address);
+    println!("bal_remaining: {}", bal_remaining);
     assert(user_balance_after == user_balance_before + WAD * 100, 'User should receive from_assets');
 
     // Verify new NFT is burned and marked as unsubscribed
@@ -810,14 +847,11 @@ fn test_unsubscribe_original_nft_fulfilled_but_not_swapped_returns_assets() {
 #[test]
 #[should_panic(expected: "Cannot unsubscribe: swaps have partially consumed assets")]
 fn test_unsubscribe_original_nft_fulfilled_partially_swapped_reverts() {
-    let (dummy_vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
 
     // 1. Subscribe
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), 100);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -828,7 +862,7 @@ fn test_unsubscribe_original_nft_fulfilled_partially_swapped_reverts() {
     let new_nft_id = router.subscribe(old_nft_id, USER1());
 
     // 2. Fulfill old NFT
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id);
+    fulfill_old_nft(vault, from_asset, old_nft_id);
     // Mark old NFT as fulfilled in router's storage
     mark_old_nft_fulfilled(router.contract_address, old_nft_id);
 
@@ -838,10 +872,6 @@ fn test_unsubscribe_original_nft_fulfilled_partially_swapped_reverts() {
     from_asset_dispatcher.transfer(router.contract_address, WAD * 100);
 
     // 4. Partial swap (swap 50 out of 100)
-    // Mock handled_epoch_len as 2 so epoch 1 can be processed (epochs are 0-indexed)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256);
-    start_mock_call(dummy_vault, selector!("epoch"), 1_u256);
     let to_asset_dispatcher = ERC20ABIDispatcher { contract_address: to_asset };
     cheat_caller_address(to_asset, OWNER(), span: CheatSpan::TargetCalls(1));
     to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 200);
@@ -852,9 +882,6 @@ fn test_unsubscribe_original_nft_fulfilled_partially_swapped_reverts() {
 
     // 5. Attempt unsubscribe - should revert because swaps have partially consumed
     // Use unsubscribe_for_underlying since old NFT is fulfilled
-    // Mock vault functions needed by unsubscribe_for_underlying
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256);
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
     // Caller must own the NFT (USER1 already owns it)
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     router.unsubscribe_for_underlying(new_nft_id, USER1());
@@ -862,33 +889,23 @@ fn test_unsubscribe_original_nft_fulfilled_partially_swapped_reverts() {
 
 #[test]
 fn test_unsubscribe_second_user_before_swaps() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
     // 1. Two users subscribe
-    let old_nft_id_1 = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
-    let old_nft_id_2 = mint_old_nft_to_user(redeem_request, dummy_vault, USER2(), 1, 200);
+    let due_amount_1: u256 = WAD * 100;
+    let old_nft_id_1 = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount_1);
+    let due_amount_2: u256 = WAD * 200;
+    let old_nft_id_2 = mint_and_redeem_old_nft_to_user(vault, USER2(), due_amount_2);
 
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
     };
 
-    // User 1 subscribes
-    let due_amount_1: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_1);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
-    
     cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_1);
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     let new_nft_id_1 = router.subscribe(old_nft_id_1, USER1());
 
-    // User 2 subscribes
-    let due_amount_2: u256 = WAD * 200;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_2);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 300);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 300);
-    
     cheat_caller_address(redeem_request.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_2);
     cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
@@ -916,46 +933,31 @@ fn test_unsubscribe_second_user_before_swaps() {
 
 #[test]
 fn test_unsubscribe_third_user_after_second_withdrawn() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
     // 1. Three users subscribe
-    let old_nft_id_1 = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
-    let old_nft_id_2 = mint_old_nft_to_user(redeem_request, dummy_vault, USER2(), 1, 200);
-    let old_nft_id_3 = mint_old_nft_to_user(redeem_request, dummy_vault, 'USER3'.try_into().unwrap(), 1, 300);
+    let due_amount_1: u256 = WAD * 100;
+    let old_nft_id_1 = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount_1);
+    let due_amount_2: u256 = WAD * 200;
+    let old_nft_id_2 = mint_and_redeem_old_nft_to_user(vault, USER2(), due_amount_2);
+    let due_amount_3: u256 = WAD * 300;
+    let old_nft_id_3 = mint_and_redeem_old_nft_to_user(vault, 'USER3'.try_into().unwrap(), due_amount_3);
 
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
     };
     let user3: ContractAddress = 'USER3'.try_into().unwrap();
 
-    // User 1 subscribes
-    let due_amount_1: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_1);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
-    
     cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_1);
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     let _new_nft_id_1 = router.subscribe(old_nft_id_1, USER1());
 
-    // User 2 subscribes
-    let due_amount_2: u256 = WAD * 200;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_2);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 300);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 300);
-    
     cheat_caller_address(redeem_request.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_2);
     cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     let new_nft_id_2 = router.subscribe(old_nft_id_2, USER2());
 
-    // User 3 subscribes
-    let due_amount_3: u256 = WAD * 300;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_3);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 600);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 600);
-    
     cheat_caller_address(redeem_request.contract_address, user3, span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_3);
     cheat_caller_address(router.contract_address, user3, span: CheatSpan::TargetCalls(1));
@@ -985,41 +987,33 @@ fn test_unsubscribe_third_user_after_second_withdrawn() {
 
 #[test]
 fn test_unsubscribe_second_user_after_fulfillment_but_before_swaps() {
-    let (dummy_vault, from_asset, _, redeem_request, _, router) = set_up();
+    let (vault, from_asset, _, redeem_request, _, router) = set_up();
 
     // 1. Two users subscribe
-    let old_nft_id_1 = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
-    let old_nft_id_2 = mint_old_nft_to_user(redeem_request, dummy_vault, USER2(), 1, 200);
+    let due_amount_1: u256 = WAD * 100;
+    let old_nft_id_1 = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount_1);
+
+    let due_amount_2: u256 = WAD * 200;
+    let old_nft_id_2 = mint_and_redeem_old_nft_to_user(vault, USER2(), due_amount_2);
 
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
     };
 
     // User 1 subscribes
-    let due_amount_1: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_1);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
-    
     cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_1);
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     let new_nft_id_1 = router.subscribe(old_nft_id_1, USER1());
 
-    // User 2 subscribes
-    let due_amount_2: u256 = WAD * 200;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount_2);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 300);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 300);
-    
     cheat_caller_address(redeem_request.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     erc721_dispatcher.approve(router.contract_address, old_nft_id_2);
     cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     let new_nft_id_2 = router.subscribe(old_nft_id_2, USER2());
 
     // 2. Fulfill both old NFTs
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id_1);
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id_2);
+    fulfill_old_nft(vault, from_asset, old_nft_id_1);
+    fulfill_old_nft(vault, from_asset, old_nft_id_2);
     // Mark old NFTs as fulfilled in router's storage
     mark_old_nft_fulfilled(router.contract_address, old_nft_id_1);
     mark_old_nft_fulfilled(router.contract_address, old_nft_id_2);
@@ -1034,9 +1028,6 @@ fn test_unsubscribe_second_user_after_fulfillment_but_before_swaps() {
 
     // 4. User 2 unsubscribes (original NFT fulfilled but not swapped)
     // Use unsubscribe_for_underlying since old NFT is fulfilled
-    // Mock vault functions needed by unsubscribe_for_underlying
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256);
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
     // Caller must own the NFT (USER2 already owns it)
     cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
     router.unsubscribe_for_underlying(new_nft_id_2, USER2());
@@ -1053,14 +1044,11 @@ fn test_unsubscribe_second_user_after_fulfillment_but_before_swaps() {
 #[test]
 #[should_panic(expected: "NFT already withdrawn")]
 fn test_unsubscribe_twice_reverts() {
-    let (dummy_vault, _, _, redeem_request, _, router) = set_up();
+    let (vault, _, _, redeem_request, _, router) = set_up();
 
     // Subscribe
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -1116,14 +1104,11 @@ fn test_set_min_subscribe_amount_reverts_when_not_owner() {
 
 #[test]
 fn test_sync_settled_epochs() {
-    let (dummy_vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
     
     // Subscribe to epoch 1
-    let old_nft_id = mint_old_nft_to_user(redeem_request, dummy_vault, USER1(), 1, 100);
     let due_amount: u256 = WAD * 100;
-    start_mock_call(dummy_vault, selector!("due_assets_from_id"), due_amount);
-    start_mock_call(dummy_vault, selector!("redeem_assets"), WAD * 100);
-    start_mock_call(dummy_vault, selector!("redeem_nominal"), WAD * 100);
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
     
     let erc721_dispatcher = ERC721ABIDispatcher {
         contract_address: redeem_request.contract_address,
@@ -1133,22 +1118,15 @@ fn test_sync_settled_epochs() {
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     let _new_nft_id = router.subscribe(old_nft_id, USER1());
     
+    // report once to skip epoch 0
+    report(vault, from_asset);
+
     // Fulfill old NFT
-    fulfill_old_nft(redeem_request, dummy_vault, old_nft_id);
-    
-    // Transfer assets and swap enough to settle epoch 1
-    let from_asset_dispatcher = ERC20ABIDispatcher { contract_address: from_asset };
-    cheat_caller_address(from_asset, OWNER(), span: CheatSpan::TargetCalls(1));
-    from_asset_dispatcher.transfer(router.contract_address, WAD * 100);
+    fulfill_old_nft(vault, from_asset, old_nft_id);
     
     let to_asset_dispatcher = ERC20ABIDispatcher { contract_address: to_asset };
     cheat_caller_address(to_asset, OWNER(), span: CheatSpan::TargetCalls(1));
     to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 1000);
-    
-    // handled_epoch_len should be 2 if epoch 1 is handled (epochs are 0-indexed, len is count)
-    start_mock_call(dummy_vault, selector!("asset"), from_asset);
-    start_mock_call(dummy_vault, selector!("handled_epoch_len"), 2_u256); // Epochs 0 and 1 handled
-    start_mock_call(dummy_vault, selector!("epoch"), 1_u256);
     
     let routes: Array<Route> = array![];
     cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
@@ -1159,6 +1137,7 @@ fn test_sync_settled_epochs() {
     router.sync_settled_epochs(10); // Check up to 10 epochs
     
     // Verify last_settled_epoch updated
+    println!("last_settled_epoch: {}", router.last_settled_epoch());
     assert(router.last_settled_epoch() == 1, 'last_settled_epoch should be 1');
 }
 
