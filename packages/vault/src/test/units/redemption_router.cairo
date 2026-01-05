@@ -460,6 +460,54 @@ fn test_subscribe_reverts_on_too_small_amount() {
     router.subscribe(old_nft_id, USER1());
 }
 
+#[test]
+fn test_redeem_and_subscribe_transfers_shares_and_subscribes() {
+    let (vault, _, _, redeem_request, _, router) = set_up();
+
+    // User deposits assets to get vault shares
+    let nominal: u256 = WAD * 100;
+    let shares = mint_old_nft_to_user(vault, USER1(), nominal);
+    let epoch: u256 = vault.epoch(); // Get current epoch from vault
+
+    // User approves router to transfer shares
+    let vault_erc20_dispatcher = ERC20ABIDispatcher { contract_address: vault.contract_address };
+    cheat_caller_address(vault.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    vault_erc20_dispatcher.approve(router.contract_address, shares);
+
+    // Get user's share balance before
+    let user_shares_before = vault_erc20_dispatcher.balance_of(USER1());
+
+    // Call redeem_and_subscribe
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    let new_nft_id = router.redeem_and_subscribe(shares, USER1());
+
+    // Verify new NFT was minted to receiver
+    let router_erc721 = ERC721ABIDispatcher { contract_address: router.contract_address };
+    assert(router_erc721.owner_of(new_nft_id) == USER1(), 'New NFT owner incorrect');
+
+    // Verify user's shares were transferred (burned by vault during request_redeem)
+    let user_shares_after = vault_erc20_dispatcher.balance_of(USER1());
+    assert(user_shares_after == user_shares_before - shares, 'User shares not transferred');
+
+    // Verify old NFT (from request_redeem) is owned by router
+    // The NFT ID returned from request_redeem is stored in old_nft_id
+    let request_info = router.new_nft_request_info(new_nft_id);
+    let old_nft_id = request_info.old_nft_id;
+    let redeem_request_erc721 = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    assert(redeem_request_erc721.owner_of(old_nft_id) == router.contract_address, 'Old NFT not owned by router');
+
+    // Verify mapping stored correctly
+    assert(request_info.is_claimed == false, 'is_claimed should be false');
+    assert(request_info.epoch == epoch, 'Epoch stored incorrectly');
+    assert(request_info.due_amount_approximate > 0, 'Due amount should be set');
+    assert(request_info.unsubscribed == false, 'unsubscribed should be false');
+
+    // Verify new_nft_id is correct (should be 0 if this is the first subscription)
+    assert(new_nft_id == 0, 'First NFT ID should be 0');
+}
+
 // ============================================================================
 // 3. Swap Function Tests
 // ============================================================================

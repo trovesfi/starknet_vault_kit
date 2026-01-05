@@ -311,6 +311,63 @@ pub mod RedemptionRouter {
             }
         }
 
+        // Internal subscription logic when NFT is already owned by this contract
+        fn _subscribe_internal(
+            ref self: ContractState,
+            nft_id: u256,
+            receiver: ContractAddress,
+            vault_dispatcher: IVaultDispatcher,
+        ) -> u256 {
+            // Read epoch and nominal from NFT
+            let redeem_request_interface = IRedeemRequestDispatcher {
+                contract_address: self.redeem_request.read(),
+            };
+            let redeem_request_info = redeem_request_interface.id_to_info(nft_id);
+            let epoch = redeem_request_info.epoch;
+            
+            // Get due_amount from vault
+            let due_amount = vault_dispatcher.due_assets_from_id(nft_id);
+            if (due_amount == 0) {
+                // nothing to settle for any NFT with due_amount == 0
+                Errors::invalid_nft_id();
+            }
+
+            // avoid processing very small subscriptions to save gas
+            if (due_amount < self.min_subscribe_amount.read()) {
+                Errors::too_small_subscribe_amount();
+            }
+
+            // Snapshot epoch data (required for fairly distributing redeemed assets to subscribers)
+            self._snapshot_epoch_data(epoch, vault_dispatcher);
+            
+            // Note: NFT is already owned by this contract, so no transfer needed
+
+            // Mint new NFT to receiver
+            let new_nft_id = self.nft_id_counter.read();
+            self.erc721.mint(receiver, new_nft_id);
+            self.nft_id_counter.write(new_nft_id + 1);
+
+            // Store mapping with epoch and due_amount_approximate
+            let request_info = RequestInfo {
+                old_nft_id: nft_id,
+                is_claimed: false,
+                epoch,
+                due_amount_approximate: due_amount,
+                unsubscribed: false,
+            };
+            self._update_request_info(new_nft_id, request_info);
+            
+            // Update epoch_wise_nominals (accumulate nominal for this epoch)
+            // Use to compute how much of the epoch is settled
+            let current_epoch_amount = self.epoch_wise_nominals.read(epoch);
+            self.epoch_wise_nominals.write(epoch, current_epoch_amount + redeem_request_info.nominal);
+
+            // Emit event
+            self.emit(Subscribed { new_nft_id, old_nft_id: nft_id, receiver });
+
+            new_nft_id
+        }
+
         // Process swap pool iteration to calculate receivable (read-only)
         fn _calculate_receivable_from_pools(
             self: @ContractState,
@@ -712,57 +769,32 @@ pub mod RedemptionRouter {
             self.pausable.assert_not_paused();
             
             let caller = get_caller_address();
-            
-            // Read epoch and due_amount from old NFT before transferring
-            let redeem_request_interface = IRedeemRequestDispatcher {
-                contract_address: self.redeem_request.read(),
-            };
-            let redeem_request_info = redeem_request_interface.id_to_info(nft_id);
-            let epoch = redeem_request_info.epoch;
-            
-            // Get due_amount from vault (before NFT is transferred/burned)
             let vault_dispatcher = IVaultDispatcher { contract_address: self.vault.read() };
-            let due_amount = vault_dispatcher.due_assets_from_id(nft_id);
-            if (due_amount == 0) {
-                // nothing to settle for any NFT with due_amount == 0
-                Errors::invalid_nft_id();
-            }
-
-            // avoid processing very small subscriptions to save gas
-            if (due_amount < self.min_subscribe_amount.read()) {
-                Errors::too_small_subscribe_amount();
-            }
-
-            // Snapshot epoch data (required for fairly distributing redeemed assets to subscribers)
-            self._snapshot_epoch_data(epoch, vault_dispatcher);
             
             // Transfer original NFT from caller to this contract
             self._transfer_original_nft(nft_id: nft_id, from_address: caller, to_address: get_contract_address());
 
-            // Mint new NFT to receiver
-            let new_nft_id = self.nft_id_counter.read();
-            self.erc721.mint(receiver, new_nft_id);
-            self.nft_id_counter.write(new_nft_id + 1);
+            // Use internal helper to handle subscription logic
+            self._subscribe_internal(nft_id, receiver, vault_dispatcher)
+        }
 
-            // Store mapping with epoch and due_amount_approximate
-            let request_info = RequestInfo {
-                old_nft_id: nft_id,
-                is_claimed: false,
-                epoch,
-                due_amount_approximate: due_amount,
-                unsubscribed: false,
-            };
-            self._update_request_info(new_nft_id, request_info);
+        fn redeem_and_subscribe(ref self: ContractState, shares: u256, receiver: ContractAddress) -> u256 {
+            self.pausable.assert_not_paused();
             
-            // Update epoch_wise_nominals (accumulate nominal for this epoch)
-            // Use to compute how much of the epoch is settled
-            let current_epoch_amount = self.epoch_wise_nominals.read(epoch);
-            self.epoch_wise_nominals.write(epoch, current_epoch_amount + redeem_request_info.nominal);
-
-            // Emit event
-            self.emit(Subscribed { new_nft_id, old_nft_id: nft_id, receiver });
-
-            new_nft_id
+            let caller = get_caller_address();
+            let this = get_contract_address();
+            let vault_address = self.vault.read();
+            
+            // Transfer shares from user to this contract
+            let vault_erc20_dispatcher = ERC20ABIDispatcher { contract_address: vault_address };
+            assert(vault_erc20_dispatcher.transfer_from(caller, this, shares), 'Transfer failed');
+            
+            // Call request_redeem on vault with receiver = this contract
+            let vault_dispatcher = IVaultDispatcher { contract_address: vault_address };
+            let nft_id = vault_dispatcher.request_redeem(shares, this, this);
+            
+            // Subscribe the NFT (already owned by this contract)
+            self._subscribe_internal(nft_id, receiver, vault_dispatcher)
         }
 
         fn swap(

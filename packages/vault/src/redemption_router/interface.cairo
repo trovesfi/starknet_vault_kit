@@ -17,6 +17,7 @@ pub struct RequestInfo {
 #[starknet::interface]
 pub trait IRedemptionRouter<TContractState> {
     fn subscribe(ref self: TContractState, nft_id: u256, receiver: ContractAddress) -> u256;
+    fn redeem_and_subscribe(ref self: TContractState, shares: u256, receiver: ContractAddress) -> u256;
     fn swap(
         ref self: TContractState,
         routes: Array<Route>,
