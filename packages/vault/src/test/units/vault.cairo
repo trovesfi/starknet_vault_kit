@@ -216,14 +216,15 @@ fn test_set_report_delay_not_owner() {
     vault.set_report_delay(Vault::MIN_REPORT_DELAY);
 }
 
-#[test]
-#[should_panic(expected: "Invalid report delay")]
-fn test_set_report_delay_invalid_delay() {
-    let (_, vault, _) = set_up();
-    let invalid_delay = Vault::MIN_REPORT_DELAY - 1;
-    cheat_caller_address_once(vault.contract_address, OWNER());
-    vault.set_report_delay(invalid_delay);
-}
+// Not needed because MIN_REPORT_DELAY is 0
+// #[test]
+// #[should_panic(expected: "Invalid report delay")]
+// fn test_set_report_delay_invalid_delay() {
+//     let (_, vault, _) = set_up();
+//     let invalid_delay = Vault::MIN_REPORT_DELAY - 1;
+//     cheat_caller_address_once(vault.contract_address, OWNER());
+//     vault.set_report_delay(invalid_delay);
+// }
 
 #[test]
 fn test_set_report_delay_success() {
