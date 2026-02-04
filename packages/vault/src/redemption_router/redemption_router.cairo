@@ -79,11 +79,14 @@ pub mod RedemptionRouter {
         integrator_fee_amount_bps: u128,
 
         // state variables
-        swap_id: u256,
+        swap_id: u256, // sequently updated id for each swap
         unsettled_swap_id: u256,
         nft_id_counter: u256, // Counter for new NFT IDs
         new_nft_request_map: Map<u256, RequestInfo>,
-        swap_info: Map<u256, (u256, u256)>, // swap_id -> (from_remaining, to_remaining)
+
+        // swap_id -> (from_remaining, to_remaining)
+        // - created during a swap and reduced when claims are made
+        swap_info: Map<u256, (u256, u256)>, 
         
         // Epoch offset tracking
         epoch_offset_factor: Map<u256, u256>, // epoch -> offset_factor (defaults to WAD)
@@ -409,6 +412,7 @@ pub mod RedemptionRouter {
                 let (from_remaining, to_remaining) = self.swap_info.read(pool_id);
 
                 if (from_remaining == 0) {
+                    // if pool is settled, advance unsettled_swap_id
                     if (self.unsettled_swap_id.read() == pool_id) {
                         self.unsettled_swap_id.write(pool_id + 1);
                     }
@@ -423,6 +427,7 @@ pub mod RedemptionRouter {
                 let new_to = to_remaining - take_to;
                 self.swap_info.write(pool_id, (new_from, new_to));
 
+                // if pool is settled, advance unsettled_swap_id
                 if (new_from == 0 && self.unsettled_swap_id.read() == pool_id) {
                     self.unsettled_swap_id.write(pool_id + 1);
                 }
@@ -846,6 +851,7 @@ pub mod RedemptionRouter {
             }
             
             // Calculate adjusted due amount with epoch offset factor
+            // - vault shares to vault asset conversion
             let remaining_due = self._calculate_adjusted_due_amount(request_info.due_amount_approximate, epoch);
 
             // Process swap pools and calculate receivable
@@ -935,6 +941,7 @@ pub mod RedemptionRouter {
 
         fn set_integrator_fee_amount_bps(ref self: ContractState, fee_bps: u128) {
             self.access_control.assert_only_role(OWNER_ROLE);
+
             self.integrator_fee_amount_bps.write(fee_bps);
         }
 
