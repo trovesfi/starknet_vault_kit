@@ -380,6 +380,7 @@ pub mod RedemptionRouter {
                 old_nft_id: nft_id,
                 is_claimed: false,
                 epoch,
+                nominal: redeem_request_info.nominal,
                 due_amount_approximate: due_amount,
                 unsubscribed: false,
             };
@@ -715,6 +716,10 @@ pub mod RedemptionRouter {
             updated.unsubscribed = true;
             self._update_request_info(nft_id, updated);
             self.erc721.burn(nft_id);
+
+            // reduce the epoch_wise_nominals by the nominal of the NFT
+            let epoch_wise_nominals = self.epoch_wise_nominals.read(request_info.epoch);
+            self.epoch_wise_nominals.write(request_info.epoch, epoch_wise_nominals - request_info.nominal);
 
             self.emit(Unsubscribed { 
                 new_nft_id: nft_id, 

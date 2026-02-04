@@ -10,6 +10,7 @@ pub struct RequestInfo {
     pub old_nft_id: u256,
     pub is_claimed: bool,
     pub epoch: u256,
+    pub nominal: u256,
     pub due_amount_approximate: u256,
     pub unsubscribed: bool, // if true, the original NFT has been unsubscribed
 }
