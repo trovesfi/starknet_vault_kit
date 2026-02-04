@@ -16,7 +16,7 @@
   "dependencies": {
     "@ericnordelo/strk-merkle-tree": "^1.0.0",
     "@noble/curves": "^2.0.0",
-    "@strkfarm/sdk": "^1.2.0",
+    "@strkfarm/sdk": "link:../../sdk-ts",
     "axios": "^1.12.2",
     "dotenv": "^17.2.1",
     "react": "^19.1.1",
