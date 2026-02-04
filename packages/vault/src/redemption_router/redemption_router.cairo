@@ -942,6 +942,10 @@ pub mod RedemptionRouter {
         fn set_integrator_fee_amount_bps(ref self: ContractState, fee_bps: u128) {
             self.access_control.assert_only_role(OWNER_ROLE);
 
+            // Ensure fee doesn't exceed 5% (500 bps)
+            if (fee_bps > 500) { // MAX_INTEGRATOR_FEES_BPS from Avnu
+                Errors::invalid_fee_amount();
+            }
             self.integrator_fee_amount_bps.write(fee_bps);
         }
 

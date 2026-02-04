@@ -62,6 +62,10 @@ pub mod Errors {
     pub fn not_owner() {
         panic!("Not owner");
     }
+
+    pub fn invalid_fee_amount() {
+        panic!("Invalid integrator fee amount");
+    }
 }
 
 

@@ -1146,6 +1146,61 @@ fn test_set_min_subscribe_amount_reverts_when_not_owner() {
     router.set_min_subscribe_amount(WAD * 100);
 }
 
+#[test]
+#[should_panic(expected: ('Caller is missing role',))]
+fn test_set_integrator_fee_amount_bps_reverts_when_not_owner() {
+    let (_, _, _, _, _, router) = set_up();
+    
+    // Non-owner attempts to set integrator_fee_amount_bps
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    router.set_integrator_fee_amount_bps(100);
+}
+
+#[test]
+#[should_panic(expected: "Invalid integrator fee amount")]
+fn test_set_integrator_fee_amount_bps_reverts_on_invalid_fee() {
+    let (_, _, _, _, _, router) = set_up();
+    
+    // Owner attempts to set fee > 500 bps (max allowed)
+    cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    router.set_integrator_fee_amount_bps(501); // Exceeds max of 500 bps
+}
+
+#[test]
+fn test_set_integrator_fee_amount_bps_success() {
+    let (_, _, _, _, _, router) = set_up();
+    
+    // Verify initial fee (set in set_up)
+    let initial_fee = router.integrator_fee_amount_bps();
+    assert(initial_fee == 100, 'Initial fee should be 100 bps');
+    
+    // Owner sets valid fee
+    cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    router.set_integrator_fee_amount_bps(250);
+    
+    // Verify fee was updated
+    let new_fee = router.integrator_fee_amount_bps();
+    assert(new_fee == 250, 'Fee should be 250 bps');
+    
+    // Test edge case: set to max allowed (500 bps)
+    cheat_caller_address(router.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    router.set_integrator_fee_amount_bps(500);
+    
+    let max_fee = router.integrator_fee_amount_bps();
+    assert(max_fee == 500, 'Fee should be 500 bps');
+}
+
+#[test]
+#[should_panic(expected: ('Caller is missing role',))]
+fn test_set_integrator_fee_recipient_reverts_when_not_owner() {
+    let (_, _, _, _, _, router) = set_up();
+    
+    // Non-owner attempts to set integrator_fee_recipient
+    let new_recipient: ContractAddress = 'NEW_RECIPIENT'.try_into().unwrap();
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    router.set_integrator_fee_recipient(new_recipient);
+}
+
 // ============================================================================
 // 7. Epoch Settlement & Sync Tests
 // ============================================================================
