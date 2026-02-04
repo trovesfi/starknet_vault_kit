@@ -261,7 +261,7 @@ pub mod RedemptionRouter {
 
         // Calculate expected settled amount for an epoch
         fn _calculate_expected_settled(self: @ContractState, epoch: u256) -> u256 {
-            let epoch_nominal = self.epoch_redeem_nominal.read(epoch);
+            let epoch_nominal = self.epoch_wise_nominals.read(epoch);
             if (epoch_nominal == 0) {
                 return 0;
             }
@@ -465,8 +465,6 @@ pub mod RedemptionRouter {
             total_to
         }
 
-        // todo what if a subscription comes in after an epoch was handled but redeem not claimed?
-
         // Settle epochs and/or sync settled epochs state
         // - If remaining_from > 0: settles epochs by allocating remaining_from to them
         // - After settling (or if remaining_from == 0): syncs by checking which epochs are fully settled
@@ -500,7 +498,7 @@ pub mod RedemptionRouter {
             
             // Phase 1: Settle epochs with remaining_from (if any)
             while (remaining_from > 0 && current_epoch <= max_epoch) {
-                let epoch_nominal = self.epoch_redeem_nominal.read(current_epoch);
+                let epoch_nominal = self.epoch_wise_nominals.read(current_epoch);
 
                 epochs_checked = epochs_checked + 1;
                 // designed to prevent excessive gas usage
@@ -569,7 +567,7 @@ pub mod RedemptionRouter {
                     break;
                 }
 
-                let epoch_nominal = self.epoch_redeem_nominal.read(current_epoch);
+                let epoch_nominal = self.epoch_wise_nominals.read(current_epoch);
                 
                 // Skip epochs without subscriptions
                 if (epoch_nominal == 0) {
