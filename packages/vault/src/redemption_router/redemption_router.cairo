@@ -348,6 +348,10 @@ pub mod RedemptionRouter {
             };
             let redeem_request_info = redeem_request_interface.id_to_info(nft_id);
             let epoch = redeem_request_info.epoch;
+            let handled_epoch_len = vault_dispatcher.handled_epoch_len();
+            if (epoch < handled_epoch_len) {
+                Errors::epoch_already_handled();
+            }
             
             // Get due_amount from vault
             let due_amount = vault_dispatcher.due_assets_from_id(nft_id);

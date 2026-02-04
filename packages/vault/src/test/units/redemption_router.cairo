@@ -461,6 +461,44 @@ fn test_subscribe_reverts_on_too_small_amount() {
 }
 
 #[test]
+#[should_panic(expected: "Epoch already handled")]
+fn test_subscribe_reverts_when_epoch_already_handled() {
+    let (vault, _, _, redeem_request, _, router) = set_up();
+    
+    // 1. Mint the NFT (redeem request) but don't subscribe
+    let due_amount: u256 = WAD * 100;
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
+    
+    // Verify NFT was minted and epoch is current
+    let epoch_before_report = vault.epoch();
+    let handled_epochs_before = vault.handled_epoch_len();
+    assert(handled_epochs_before == 0, 'Should start with 0');
+    
+    // 2. Report - this handles the epoch
+    // increase timestamp, else report fails
+    let now = get_block_timestamp();
+    start_cheat_block_timestamp_global(now + 3600); // 1 hour
+    
+    let oracle = ORACLE();
+    cheat_caller_address(vault.contract_address, oracle, span: CheatSpan::TargetCalls(1));
+    vault.report(0);
+    
+    // Verify epoch was handled
+    let handled_epochs_after = vault.handled_epoch_len();
+    assert(handled_epochs_after == 1, 'Epoch 0 should be handled');
+    assert(epoch_before_report < handled_epochs_after, 'Epoch should be handled');
+    
+    // 3. Try to subscribe - should fail with "Epoch already handled"
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    erc721_dispatcher.approve(router.contract_address, old_nft_id);
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    router.subscribe(old_nft_id, USER1()); // Should panic with "Epoch already handled"
+}
+
+#[test]
 fn test_redeem_and_subscribe_transfers_shares_and_subscribes() {
     let (vault, _, _, redeem_request, _, router) = set_up();
 

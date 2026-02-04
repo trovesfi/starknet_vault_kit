@@ -66,6 +66,10 @@ pub mod Errors {
     pub fn invalid_fee_amount() {
         panic!("Invalid integrator fee amount");
     }
+
+    pub fn epoch_already_handled() {
+        panic!("Epoch already handled");
+    }
 }
 
 
