@@ -117,6 +117,9 @@ pub mod RedemptionRouter {
         Claimed: Claimed,
         RequestInfo: RequestInfo,
         Unsubscribed: Unsubscribed,
+        IntegratorFeeRecipientSet: IntegratorFeeRecipientSet,
+        IntegratorFeeAmountBpsSet: IntegratorFeeAmountBpsSet,
+        MinSubscribeAmountSet: MinSubscribeAmountSet,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -160,6 +163,22 @@ pub mod RedemptionRouter {
         #[key]
         pub swap_id: u256,
         pub receivable: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct IntegratorFeeRecipientSet {
+        #[key]
+        pub recipient: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct IntegratorFeeAmountBpsSet {
+        pub fee_bps: u128,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    pub struct MinSubscribeAmountSet {
+        pub min_subscribe_amount: u256,
     }
 
     #[constructor]
@@ -873,6 +892,7 @@ pub mod RedemptionRouter {
                 Errors::zero_address();
             }
             self.integrator_fee_recipient.write(recipient);
+            self.emit(IntegratorFeeRecipientSet { recipient });
         }
 
         fn set_integrator_fee_amount_bps(ref self: ContractState, fee_bps: u128) {
@@ -883,6 +903,7 @@ pub mod RedemptionRouter {
                 Errors::invalid_fee_amount();
             }
             self.integrator_fee_amount_bps.write(fee_bps);
+            self.emit(IntegratorFeeAmountBpsSet { fee_bps });
         }
 
         fn set_epoch_offset(ref self: ContractState, epoch: u256, offset_factor: u256) {
@@ -943,6 +964,7 @@ pub mod RedemptionRouter {
         fn set_min_subscribe_amount(ref self: ContractState, min_subscribe_amount: u256) {
             self.access_control.assert_only_role(OWNER_ROLE);
             self.min_subscribe_amount.write(min_subscribe_amount);
+            self.emit(MinSubscribeAmountSet { min_subscribe_amount });
         }
 
         fn pause(ref self: ContractState) {
