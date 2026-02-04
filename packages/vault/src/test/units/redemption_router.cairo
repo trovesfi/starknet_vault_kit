@@ -140,12 +140,12 @@ fn set_up() -> (
 
     // to avoid zero liquidity error, seed some initial liquidity
     let due_amount_1: u256 = WAD * 100;
-    mint_old_nft_to_user(vault, OWNER(), due_amount_1);
+    deposit_to_user(vault, OWNER(), due_amount_1);
 
     (vault, from_asset, to_asset, redeem_request, avnu_exchange, router)
 }
 
-fn mint_old_nft_to_user(
+fn deposit_to_user(
     vault: IVaultDispatcher, user: ContractAddress, nominal: u256,
 ) -> u256 {
     // First, user needs to deposit assets to get vault shares
@@ -172,7 +172,7 @@ fn mint_old_nft_to_user(
 fn mint_and_redeem_old_nft_to_user(
     vault: IVaultDispatcher, user: ContractAddress, nominal: u256,
 ) -> u256 {
-    let shares = mint_old_nft_to_user(vault, user, nominal);
+    let shares = deposit_to_user(vault, user, nominal);
 
     // Call request_redeem on vault as if user is trying to withdraw
     // Now call request_redeem as the user
@@ -466,7 +466,7 @@ fn test_redeem_and_subscribe_transfers_shares_and_subscribes() {
 
     // User deposits assets to get vault shares
     let nominal: u256 = WAD * 100;
-    let shares = mint_old_nft_to_user(vault, USER1(), nominal);
+    let shares = deposit_to_user(vault, USER1(), nominal);
     let epoch: u256 = vault.epoch(); // Get current epoch from vault
 
     // User approves router to transfer shares
@@ -1258,3 +1258,82 @@ fn test_sync_settled_epochs_reverts_when_paused() {
     router.sync_settled_epochs(10);
 }
 
+#[test]
+fn test_report_updates_offset_factor_for_currently_handled_epoch() {
+    let (vault, _, _, redeem_request, _, router) = set_up();
+    
+    let vault_dispatcher = IVaultDispatcher { contract_address: vault.contract_address };
+
+    // Initial state: no epochs handled yet
+    let handled_epochs_before = vault.handled_epoch_len();
+    assert(handled_epochs_before == 0, 'Should start with 0');
+    
+    // Grant RELAYER role to router
+    let access_control = IAccessControlDispatcher {
+        contract_address: vault.contract_address,
+    };
+    cheat_caller_address(vault.contract_address, OWNER(), span: CheatSpan::TargetCalls(1));
+    access_control.grant_role(Vault::ORACLE_ROLE, router.contract_address);
+
+    // Subscribe to epoch 0 (before any report)
+    let due_amount: u256 = WAD * 100;
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
+    
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    erc721_dispatcher.approve(router.contract_address, old_nft_id);
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    let _new_nft_id = router.subscribe(old_nft_id, USER1());
+    
+    // Verify epoch 0 offset factor is not set (defaults to 0, which means WAD when used)
+    let offset_before_report = router.get_epoch_offset(0);
+    assert(offset_before_report == 1000000000000000000, 'Offset should be 0');
+    
+    // Call report on vault to handle epoch 0
+    // increase timestamp, else report fails
+    let now = get_block_timestamp();
+    start_cheat_block_timestamp_global(now + 3600); // 1 hour
+    
+    // runs epoch from 1 to 1 (skips epoch 0)
+    cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
+    router.report(0);
+    
+    // After vault report, handled_epoch_len should be 1 (epoch 0 is now handled)
+    let handled_epochs_after_vault = vault.handled_epoch_len();
+    assert(handled_epochs_after_vault == 1, 'Epoch 0 should be handled');
+
+    // advance epoch
+    start_cheat_block_timestamp_global(now + (3600 * 2)); // 2 hour
+    // Now call router.report() which should update offset factor for epoch 0
+    // The bug: it starts from handled_epochs_before + 1 = 1 + 1 = 2, runs till 2, skipping epoch 1
+    cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
+    let aum = vault.aum();
+    router.report(aum * 100001/100000);
+    
+    // request withdrawal (i.e. mint nft) && subscribe to epoch 1
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), WAD * 100);
+    cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    erc721_dispatcher.approve(router.contract_address, old_nft_id);
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    let _new_nft_id = router.subscribe(old_nft_id, USER1());
+    
+    start_cheat_block_timestamp_global(now + (3600 * 3)); // 3 hour
+    // Now call router.report() which should update offset factor for epoch 0
+    // The bug: it starts from handled_epochs_before + 1 = 2 + 1 = 3, runs till 3, skipping epoch 2
+    cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
+    let aum = vault.aum();
+    router.report(aum * (100000 - 1)/100000); // loss of 1 basis point
+
+    // Verify epoch 0 offset factor was updated
+    // If the bug exists, offset will still be 0 (not updated)
+    // If fixed, offset should be calculated based on the ratio
+    let offset_after_report = router.get_epoch_offset(2);
+    
+    // The bug: offset_after_report will be 0 because epoch 0 was skipped
+    // After fix: offset_after_report should be calculated if conditions are met
+    // For now, we test that the bug exists by checking offset is still 0
+    // After fixing, this assertion should check that offset was calculated
+    assert(offset_after_report != WAD && offset_after_report != 0, 'Offset factor not right');
+}

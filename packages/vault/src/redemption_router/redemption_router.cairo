@@ -88,7 +88,9 @@ pub mod RedemptionRouter {
         // - created during a swap and reduced when claims are made
         swap_info: Map<u256, (u256, u256)>, 
         
-        // Epoch offset tracking
+        // Epoch offset tracking (in case, an epoch incurs loss, the output amount is lower than
+        // expected value computed during subscribe time)
+        // this factor represents that relative loss in WAD
         epoch_offset_factor: Map<u256, u256>, // epoch -> offset_factor (defaults to WAD)
         epoch_redeem_assets: Map<u256, u256>, // epoch -> snapshot of redeem_assets at subscribe time
         epoch_redeem_nominal: Map<u256, u256>, // epoch -> snapshot of redeem_nominal at subscribe time
@@ -930,7 +932,7 @@ pub mod RedemptionRouter {
             let handled_epochs_after = vault_dispatcher.handled_epoch_len();
             
             // For each newly handled epoch, compute and update offset factor
-            let mut epoch = handled_epochs_before + 1;
+            let mut epoch = handled_epochs_before;
             while (epoch <= handled_epochs_after) {
                 // Read new redeem_assets and redeem_nominal after report
                 let new_redeem_assets = vault_dispatcher.redeem_assets(epoch);
