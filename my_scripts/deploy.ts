@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 import {
+
   ContractAddr,
   Deployer,
   getMainnetConfig,
@@ -16,6 +17,7 @@ import {
   VesuModifyPositionCallParams,
   Web3Number,
 } from "@strkfarm/sdk";
+
 import {
   Account,
   byteArray,
@@ -42,7 +44,6 @@ interface VaultContracts {
   manager: ContractAddr;
 }
 
-console.log("url", process.env.RPC_URL);
 const config = getMainnetConfig(process.env.RPC_URL!, "latest");
 const acc = new Account({
   provider: config.provider as any,
@@ -73,8 +74,8 @@ const pricer = new PricerFromApi(config, Global.getDefaultTokens());
 //         package_name: VAULT_PACKAGE,
 //         constructorData: getVaultConstructorCall({
 //             // ! update all 3
-//             name: `Extended Test ${symbol}`,
-//             symbol: `Extended Test t${symbol}`,
+//             name: `Testing Vault ${symbol}`,
+//             symbol: `Testing Vault  ${symbol}`,
 //             underlying_asset: Global.getDefaultTokens().find(token => token.symbol === symbol)?.address!,
 //             owner: OWNER,
 //             fees_recipient: FEE_RECIPIENT,
@@ -209,11 +210,22 @@ async function configureSettings(vaultContracts: VaultContracts) {
 //     await Deployer.executeDeployCalls(calls, acc, config.provider);
 // }
 
-async function setManagerRoot(vaultStrategy: VesuExtendedMultiplierStrategy<VesuExtendedStrategySettings>, caller: ContractAddr) {
-    const provider = config.provider;
-    const setRootCall = vaultStrategy.getSetManagerCall(caller);
-    const setRootCall2 = vaultStrategy.getSetManagerCall(vaultStrategy.metadata.additionalInfo.manager);
-    await Deployer.executeTransactions([setRootCall, setRootCall2], acc as any, provider, 'Trigger manage');
+async function setManagerRoot(
+  // vaultStrategy: BtcFiVesuExtendedStrategy<BtcFiVesuExtendedStrategySettings>,
+  vaultStrategy: VesuExtendedMultiplierStrategy<VesuExtendedStrategySettings>,
+  caller: ContractAddr
+) {
+  const provider = config.provider;
+  const setRootCall = vaultStrategy.getSetManagerCall(caller);
+  const setRootCall2 = vaultStrategy.getSetManagerCall(
+    vaultStrategy.metadata.additionalInfo.manager
+  );
+  await Deployer.executeTransactions(
+    [setRootCall, setRootCall2],
+    acc as any,
+    provider,
+    "Trigger manage"
+  );
 }
 
 async function upgrade(
@@ -465,21 +477,26 @@ if (require.main === module) {
 
 //deployStrategy();
 // deployAUMOracle("0x437ef1e7d0f100b2e070b7a65cafec0b2be31b0290776da8b4112f5473d8d9")
-const strategy = VesuExtendedTestStrategies("http://localhost:8000","6518ea0460ef2726491928287e8e88bc", 220774)[0]
-const vaultStrategy = new VesuExtendedMultiplierStrategy(
-  config,
-  pricer,
-  strategy
-);
-// // // const vaultStrategy = new UniversalLstMultiplierStrategy(config, pricer, strategy);
-const vaultContracts = {
-  vault: strategy.additionalInfo.vaultAddress,
-  redeemRequest: strategy.additionalInfo.redeemRequestNFT,
-  vaultAllocator: strategy.additionalInfo.vaultAllocator,
-  manager: strategy.additionalInfo.manager,
-};
 
+  const strategy = VesuExtendedTestStrategies(
+    process.env.EXTENDED_BACKEND_URL_READ as string,
+    process.env.EXTENDED_BACKEND_URL as string,
+    Number(process.env.VAULT_ID_EXTENDED),
+    5,
+    5,
+    3000,
+    300,
+    600,
+  )[0];
 
+  const vaultStrategy = new VesuExtendedMultiplierStrategy(config, pricer, strategy);
+  // // const vaultStrategy = new UniversalLstMultiplierStrategy(config, pricer, strategy);
+  const vaultContracts = {
+    vault: strategy.additionalInfo.vaultAddress,
+    redeemRequest: strategy.additionalInfo.redeemRequestNFT,
+    vaultAllocator: strategy.additionalInfo.vaultAllocator,
+    manager: strategy.additionalInfo.manager,
+  };
 async function setConfig() {
   //await deployLegacyToNewAvnuDecoderAndSanitizer();
   // console.log(vaultContracts, strategy.depositTokens);
