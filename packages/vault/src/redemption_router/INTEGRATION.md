@@ -100,9 +100,7 @@ Can get routes from Avnu.
 #### Monitoring Swap Pool
 
 The router maintains a swap pool that users claim from. Monitor:
-- `router.swap_id()` - Current swap ID (next swap will use this)
-- `router.unsettled_swap_id()` - First swap ID that still has remaining assets
-- `router.swap_info(swap_id)` - Returns `(from_remaining, to_remaining)` for a swap
+- Swap accounting is epoch-scoped via `epoch_swap_pool` internally. Per-swap pool views are removed.
 
 ### Processing Claims
 

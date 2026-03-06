@@ -26,6 +26,7 @@ use vault::vault::interface::{IVaultDispatcher, IVaultDispatcherTrait};
 use vault::vault::vault::Vault;
 use vault_allocator::decoders_and_sanitizers::decoder_custom_types::Route;
 use vault_allocator::mocks::mock_avnu_exchange::IAvnuExchangeDispatcher;
+use openzeppelin::utils::math;
 
 const RELAYER: ContractAddress = 0x1234567890.try_into().unwrap();
 
@@ -276,10 +277,7 @@ fn test_constructor_initializes_correctly() {
     let has_owner_role = access_control.has_role(selector!("OWNER_ROLE"), OWNER());
     assert(has_owner_role, 'Owner role not set');
     println!("roles set");
-    // Verify swap_id and unsettled_swap_id start at 1
-    assert(router.swap_id() == 1, 'swap_id should start at 1');
-    assert(router.unsettled_swap_id() == 1, 'unsettled_swap_id != 1');
-    println!("swap_id and unsettled_swap_id start at 1");
+    println!("router initialized");
     // Verify NFT counter starts at 0 (but we can't directly read it, so check via first mint)
     // Actually, we can't verify this without minting, but the contract code shows it's initialized to 0
     println!("NFT counter starts at 0");
@@ -573,16 +571,8 @@ fn test_swap_executes_successfully() {
     cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
     let swap_id = router.swap(routes, from_amount, min_amount_out);
 
-    // Verify swap_id is 1 (first swap)
-    assert(swap_id == 1, 'swap_id should be 1');
-
-    // Verify swap_info stores correct amounts
-    let (stored_from, stored_to) = router.swap_info(swap_id);
-    assert(stored_from == from_amount, 'Stored from_amount incorrect');
-    assert(stored_to == min_amount_out, 'Stored to_amount incorrect');
-
-    // Verify swap_id incremented
-    assert(router.swap_id() == 2, 'swap_id should increment to 2');
+    // swap now returns the latest fully settled epoch
+    assert(swap_id == 0, 'unexpected last_settled_epoch');
 }
 
 #[test]
@@ -669,11 +659,8 @@ fn test_swap_uses_actual_received_amount() {
     cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
     let swap_id = router.swap(routes, from_amount, min_amount_out);
 
-    // Verify swap_info stores actual received amount (balance delta)
-    let (stored_from, stored_to) = router.swap_info(swap_id);
-    assert(stored_from == from_amount, 'Stored from_amount incorrect');
-    // Verify stored to_amount matches what was actually received (min_amount_out)
-    assert(stored_to == min_amount_out, 'Stored to_amount invalid');
+    // swap returns latest settled epoch
+    assert(swap_id == 0, 'unexpected last_settled_epoch');
 }
 
 // ============================================================================
@@ -732,8 +719,7 @@ fn test_claim_single_subscribe_single_swap_single_claim() {
     let request_info = router.new_nft_request_info(new_nft_id);
     assert(request_info.is_claimed == true, 'NFT should be marked as claimed');
 
-    // Verify pool fully consumed, unsettled_swap_id advanced
-    assert(router.unsettled_swap_id() == 2, 'unsettled_swap_id != 2');
+    assert(receivable == min_amount_out, 'single claim full out');
 }
 
 #[test]
@@ -787,12 +773,6 @@ fn test_claim_two_subscribes_one_swap_two_claims() {
     assert(receivable_1 == WAD * 200, 'User 1 receivable incorrect');
     println!("claimed 1");
 
-    // Verify swap info updated correctly
-    let (from_rem, to_rem) = router.swap_info(1);
-    println!("from_rem: {}", from_rem);
-    println!("to_rem: {}", to_rem);
-    assert(from_rem == WAD * 200, 'Remaining from_amount incorrect');
-    assert(to_rem == WAD * 400, 'Remaining to_amount incorrect');
     println!("claimed 2");
     // 7. Claim User 2: due = 200, should get 200 * 600 / 300 = 400
     // But since pool has remaining: 200 from, 400 to, user gets 400
@@ -802,8 +782,8 @@ fn test_claim_two_subscribes_one_swap_two_claims() {
     let receivable_2 = router.claim(new_nft_id_2);
     assert(receivable_2 == WAD * 400, 'User 2 receivable incorrect');
 
-    // Verify pool fully consumed
-    assert(router.unsettled_swap_id() == 2, 'unsettled_swap_id != 2');
+    // Verify aggregate output is fully distributed across claims
+    assert(receivable_1 + receivable_2 == WAD * 600, 'Total receivable incorrect');
 }
 
 #[test]
@@ -842,6 +822,97 @@ fn test_claim_requires_epoch_settled() {
     // Attempt to claim - should fail because epoch not fully settled
     cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
     router.claim(new_nft_id); // Should fail - epoch not settled
+}
+
+#[test]
+fn test_claim_epoch_pool_socializes_multiple_swaps_avg_price() {
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+
+    // 1. Two users subscribe in the same epoch
+    let due_amount_1: u256 = WAD * 100;
+    let old_nft_id_1 = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount_1);
+    let due_amount_2: u256 = WAD * 200;
+    let old_nft_id_2 = mint_and_redeem_old_nft_to_user(vault, USER2(), due_amount_2);
+
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    erc721_dispatcher.approve(router.contract_address, old_nft_id_1);
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    let new_nft_id_1 = router.subscribe(old_nft_id_1, USER1());
+
+    cheat_caller_address(redeem_request.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
+    erc721_dispatcher.approve(router.contract_address, old_nft_id_2);
+    cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
+    let new_nft_id_2 = router.subscribe(old_nft_id_2, USER2());
+
+    // 2. Fulfill both old NFTs
+    fulfill_old_nft(vault, from_asset, old_nft_id_1);
+    fulfill_old_nft(vault, from_asset, old_nft_id_2);
+
+    // 3. Seed AVNU mock with enough output asset
+    let to_asset_dispatcher = ERC20ABIDispatcher { contract_address: to_asset };
+    cheat_caller_address(to_asset, OWNER(), span: CheatSpan::TargetCalls(1));
+    to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 1000);
+
+    // 4. Execute two swaps at different prices for same epoch:
+    // swap#1: 100 -> 100, swap#2: 200 -> 600, total epoch price = 700/300
+    cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
+    router.swap(array![], WAD * 100, WAD * 100);
+    cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
+    router.swap(array![], WAD * 200, WAD * 600);
+
+    // 5. Claims should get the epoch-average price regardless of per-swap price dispersion
+    let total_from: u256 = WAD * 300;
+    let total_to: u256 = WAD * 700;
+    let expected_user2 = math::u256_mul_div(
+        WAD * 200, total_to, total_from, math::Rounding::Floor
+    );
+    let expected_user1 = total_to - expected_user2;
+
+    // Claim user2 first to ensure ordering does not favor first swap
+    cheat_caller_address(router.contract_address, USER2(), span: CheatSpan::TargetCalls(1));
+    let receivable_2 = router.claim(new_nft_id_2);
+    assert(receivable_2 == expected_user2, 'User2 avg receivable');
+
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    let receivable_1 = router.claim(new_nft_id_1);
+    assert(receivable_1 == expected_user1, 'User1 avg receivable');
+
+    assert(receivable_1 + receivable_2 == total_to, 'Total output mismatch');
+}
+
+#[test]
+#[should_panic(expected: "Claim not allowed")]
+fn test_claim_reverts_when_epoch_swap_pending_even_with_funds_available() {
+    let (vault, from_asset, to_asset, redeem_request, avnu_exchange, router) = set_up();
+
+    // 1. Subscribe
+    let due_amount: u256 = WAD * 100;
+    let old_nft_id = mint_and_redeem_old_nft_to_user(vault, USER1(), due_amount);
+    let erc721_dispatcher = ERC721ABIDispatcher {
+        contract_address: redeem_request.contract_address,
+    };
+    cheat_caller_address(redeem_request.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    erc721_dispatcher.approve(router.contract_address, old_nft_id);
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    let new_nft_id = router.subscribe(old_nft_id, USER1());
+
+    // 2. Fulfill old NFT then partially swap epoch (50/100), while output funds are available
+    fulfill_old_nft(vault, from_asset, old_nft_id);
+
+    let to_asset_dispatcher = ERC20ABIDispatcher { contract_address: to_asset };
+    cheat_caller_address(to_asset, OWNER(), span: CheatSpan::TargetCalls(1));
+    to_asset_dispatcher.transfer(avnu_exchange.contract_address, WAD * 1000);
+
+    let routes: Array<Route> = array![];
+    cheat_caller_address(router.contract_address, RELAYER, span: CheatSpan::TargetCalls(1));
+    router.swap(routes, WAD * 50, WAD * 200); // epoch still pending
+
+    // 3. Even with output asset in router, claim must stay blocked until epoch is fully settled
+    cheat_caller_address(router.contract_address, USER1(), span: CheatSpan::TargetCalls(1));
+    router.claim(new_nft_id);
 }
 
 // ============================================================================

@@ -79,14 +79,12 @@ pub mod RedemptionRouter {
         integrator_fee_amount_bps: u128,
 
         // state variables
-        swap_id: u256, // sequently updated id for each swap
-        unsettled_swap_id: u256,
         nft_id_counter: u256, // Counter for new NFT IDs
         new_nft_request_map: Map<u256, RequestInfo>,
 
-        // swap_id -> (from_remaining, to_remaining)
-        // - created during a swap and reduced when claims are made
-        swap_info: Map<u256, (u256, u256)>, 
+        // epoch -> (from_remaining, to_remaining)
+        // - accumulates all swap executions that settle this epoch
+        epoch_swap_pool: Map<u256, (u256, u256)>,
         
         // Epoch offset tracking (in case, an epoch incurs loss, the output amount is lower than
         // expected value computed during subscribe time)
@@ -149,8 +147,6 @@ pub mod RedemptionRouter {
 
     #[derive(Drop, starknet::Event)]
     pub struct Swapped {
-        #[key]
-        pub swap_id: u256,
         pub from_amount: u256,
         pub to_amount: u256,
         pub last_settled_epoch: u256,
@@ -162,8 +158,6 @@ pub mod RedemptionRouter {
         pub new_nft_id: u256,
         #[key]
         pub old_nft_id: u256,
-        #[key]
-        pub swap_id: u256,
         pub receivable: u256,
     }
 
@@ -231,9 +225,6 @@ pub mod RedemptionRouter {
         self.avnu_exchange.write(avnu_exchange);
         self.integrator_fee_recipient.write(integrator_fee_recipient);
         self.integrator_fee_amount_bps.write(integrator_fee_amount_bps);
-        // Initialize swap counters (starting from 1)
-        self.swap_id.write(1);
-        self.unsettled_swap_id.write(1);
         // Read the latest handled epoch from the vault
         let vault_dispatcher = IVaultDispatcher { contract_address: self.vault.read() };
         let latest_handled_epoch = vault_dispatcher.handled_epoch_len();
@@ -397,73 +388,36 @@ pub mod RedemptionRouter {
             new_nft_id
         }
 
-        // Process swap pool iteration to calculate receivable (read-only)
-        fn _calculate_receivable_from_pools(
+        // Calculate receivable from an epoch-specific pool (read-only)
+        fn _calculate_receivable_from_epoch_pool(
             self: @ContractState,
+            epoch: u256,
             mut remaining_due: u256
         ) -> u256 {
-            let mut pool_id = self.unsettled_swap_id.read();
-            let end_pool = self.swap_id.read();
-            let mut total_to: u256 = 0;
-
-            while (remaining_due > 0 && pool_id < end_pool) {
-                let (from_remaining, to_remaining) = self.swap_info.read(pool_id);
-
-                if (from_remaining == 0) {
-                    pool_id = pool_id + 1;
-                    continue;
-                }
-
-                let take_from = if (remaining_due > from_remaining) { from_remaining } else { remaining_due };
-                let take_to = math::u256_mul_div(take_from, to_remaining, from_remaining, math::Rounding::Floor);
-
-                remaining_due = remaining_due - take_from;
-                total_to = total_to + take_to;
-                pool_id = pool_id + 1;
+            let (from_remaining, to_remaining) = self.epoch_swap_pool.read(epoch);
+            if (from_remaining == 0 || from_remaining < remaining_due) {
+                return 0;
             }
-
-            total_to
+            math::u256_mul_div(remaining_due, to_remaining, from_remaining, math::Rounding::Floor)
         }
 
-        // Process swap pool iteration and update state (write)
-        fn _process_swap_pools_for_claim(
+        // Process epoch-specific pool for claim and update state (write)
+        fn _process_epoch_pool_for_claim(
             ref self: ContractState,
+            epoch: u256,
             mut remaining_due: u256
         ) -> u256 {
-            let mut pool_id = self.unsettled_swap_id.read();
-            let end_pool = self.swap_id.read();
-            let mut total_to: u256 = 0;
-
-            while (remaining_due > 0 && pool_id < end_pool) {
-                let (from_remaining, to_remaining) = self.swap_info.read(pool_id);
-
-                if (from_remaining == 0) {
-                    // if pool is settled, advance unsettled_swap_id
-                    if (self.unsettled_swap_id.read() == pool_id) {
-                        self.unsettled_swap_id.write(pool_id + 1);
-                    }
-                    pool_id = pool_id + 1;
-                    continue;
-                }
-
-                let take_from = if (remaining_due > from_remaining) { from_remaining } else { remaining_due };
-                let take_to = math::u256_mul_div(take_from, to_remaining, from_remaining, math::Rounding::Floor);
-
-                let new_from = from_remaining - take_from;
-                let new_to = to_remaining - take_to;
-                self.swap_info.write(pool_id, (new_from, new_to));
-
-                // if pool is settled, advance unsettled_swap_id
-                if (new_from == 0 && self.unsettled_swap_id.read() == pool_id) {
-                    self.unsettled_swap_id.write(pool_id + 1);
-                }
-
-                remaining_due = remaining_due - take_from;
-                total_to = total_to + take_to;
-                pool_id = pool_id + 1;
+            let (from_remaining, to_remaining) = self.epoch_swap_pool.read(epoch);
+            if (from_remaining == 0 || from_remaining < remaining_due) {
+                Errors::claim_not_allowed();
             }
-
-            total_to
+            let take_to = math::u256_mul_div(
+                remaining_due, to_remaining, from_remaining, math::Rounding::Floor
+            );
+            let new_from = from_remaining - remaining_due;
+            let new_to = to_remaining - take_to;
+            self.epoch_swap_pool.write(epoch, (new_from, new_to));
+            take_to
         }
 
         // Settle epochs and/or sync settled epochs state
@@ -475,6 +429,7 @@ pub mod RedemptionRouter {
         fn _settle_and_sync_epochs(
             ref self: ContractState,
             mut remaining_from: u256,
+            mut remaining_to: u256,
             max_epochs_to_check: u256
         ) -> u256 {
             // Get the vault's current epoch to know the upper bound
@@ -493,6 +448,8 @@ pub mod RedemptionRouter {
             let mut current_epoch = if last_settled_epoch == 0 { 0 } else { last_settled_epoch + 1 };
             let mut highest_settled_epoch: u256 = last_settled_epoch;
             let mut epochs_checked: u256 = 0;
+            // Track the unsettled from amount of this swap that still needs to be mapped to to-asset.
+            let mut remaining_from_for_allocation = remaining_from;
             
             // If max_epochs_to_check is 0, check all epochs (no limit)
             let check_all = max_epochs_to_check == 0;
@@ -546,6 +503,21 @@ pub mod RedemptionRouter {
                 let new_settled = already_settled + settle_amount;
                 self.epoch_settled_amounts.write(current_epoch, new_settled);
                 remaining_from = remaining_from - settle_amount;
+
+                // Allocate swap output to the current epoch pool proportionally to settled from amount.
+                if (settle_amount > 0 && remaining_from_for_allocation > 0) {
+                    let allocated_to = math::u256_mul_div(
+                        settle_amount,
+                        remaining_to,
+                        remaining_from_for_allocation,
+                        math::Rounding::Floor
+                    );
+                    let (epoch_from, epoch_to) = self.epoch_swap_pool.read(current_epoch);
+                    self.epoch_swap_pool
+                        .write(current_epoch, (epoch_from + settle_amount, epoch_to + allocated_to));
+                    remaining_from_for_allocation = remaining_from_for_allocation - settle_amount;
+                    remaining_to = remaining_to - allocated_to;
+                }
                 
                 // If epoch is now fully settled, update highest_settled_epoch
                 if (new_settled >= expected_settled) {
@@ -783,17 +755,12 @@ pub mod RedemptionRouter {
             let to_amount = self._execute_avnu_swap(routes, from_amount, min_amount_out);
 
             // Settle epochs based on from_amount received
-            let last_settled_epoch = self._settle_and_sync_epochs(from_amount, 0);
-
-            // Store swap info
-            let current_swap_id = self.swap_id.read();
-            self.swap_info.write(current_swap_id, (from_amount, to_amount));
-            self.swap_id.write(current_swap_id + 1);
+            let last_settled_epoch = self._settle_and_sync_epochs(from_amount, to_amount, 0);
 
             // Emit event
-            self.emit(Swapped { swap_id: current_swap_id, from_amount, to_amount, last_settled_epoch });
+            self.emit(Swapped { from_amount, to_amount, last_settled_epoch });
 
-            current_swap_id
+            last_settled_epoch
         }
 
         fn claim(ref self: ContractState, nft_id: u256) -> u256 {
@@ -819,7 +786,7 @@ pub mod RedemptionRouter {
             let remaining_due = self._calculate_adjusted_due_amount(request_info.due_amount_approximate, epoch);
 
             // Process swap pools and calculate receivable
-            let total_to = self._process_swap_pools_for_claim(remaining_due);
+            let total_to = self._process_epoch_pool_for_claim(epoch, remaining_due);
 
             // Burn NFT and mark claimed
             self.erc721.burn(nft_id);
@@ -836,7 +803,7 @@ pub mod RedemptionRouter {
             }
             to_asset_dispatcher.transfer(owner, total_to);
 
-            self.emit(Claimed { new_nft_id: nft_id, old_nft_id: request_info.old_nft_id, swap_id: self.unsettled_swap_id.read(), receivable: total_to });
+            self.emit(Claimed { new_nft_id: nft_id, old_nft_id: request_info.old_nft_id, receivable: total_to });
 
             total_to
         }
@@ -1010,20 +977,8 @@ pub mod RedemptionRouter {
             self.integrator_fee_amount_bps.read()
         }
 
-        fn swap_id(self: @ContractState) -> u256 {
-            self.swap_id.read()
-        }
-
-        fn unsettled_swap_id(self: @ContractState) -> u256 {
-            self.unsettled_swap_id.read()
-        }
-
         fn new_nft_request_info(self: @ContractState, new_nft_id: u256) -> RequestInfo {
             self.new_nft_request_map.read(new_nft_id)
-        }
-
-        fn swap_info(self: @ContractState, swap_id: u256) -> (u256, u256) {
-            self.swap_info.read(swap_id)
         }
 
         fn last_nft_id(self: @ContractState) -> u256 {
@@ -1046,8 +1001,8 @@ pub mod RedemptionRouter {
             // Calculate adjusted due amount with epoch offset factor
             let remaining_due = self._calculate_adjusted_due_amount(request_info.due_amount_approximate, request_info.epoch);
 
-            // Calculate receivable from swap pools (read-only)
-            self._calculate_receivable_from_pools(remaining_due)
+            // Calculate receivable from epoch pool (read-only)
+            self._calculate_receivable_from_epoch_pool(request_info.epoch, remaining_due)
         }
 
         fn last_settled_epoch(self: @ContractState) -> u256 {
@@ -1062,7 +1017,9 @@ pub mod RedemptionRouter {
         // Allows batching their settlement without running out of gas.
         fn sync_settled_epochs(ref self: ContractState, max_epochs_to_check: u256) {
             self.pausable.assert_not_paused();
-            self._settle_and_sync_epochs(remaining_from: 0, max_epochs_to_check: max_epochs_to_check);
+            self._settle_and_sync_epochs(
+                remaining_from: 0, remaining_to: 0, max_epochs_to_check: max_epochs_to_check
+            );
         }
     }
 

@@ -51,10 +51,7 @@ pub trait IRedemptionRouter<TContractState> {
     fn avnu_exchange(self: @TContractState) -> ContractAddress;
     fn integrator_fee_recipient(self: @TContractState) -> ContractAddress;
     fn integrator_fee_amount_bps(self: @TContractState) -> u128;
-    fn swap_id(self: @TContractState) -> u256;
-    fn unsettled_swap_id(self: @TContractState) -> u256;
     fn new_nft_request_info(self: @TContractState, new_nft_id: u256) -> RequestInfo;
-    fn swap_info(self: @TContractState, swap_id: u256) -> (u256, u256); // Returns (from_amount, to_amount)
     fn last_nft_id(self: @TContractState) -> u256;
     fn expected_receivable(self: @TContractState, nft_id: u256) -> u256;
     fn last_settled_epoch(self: @TContractState) -> u256;
