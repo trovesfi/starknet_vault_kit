@@ -56,6 +56,7 @@ pub trait IRedemptionRouter<TContractState> {
     fn expected_receivable(self: @TContractState, nft_id: u256) -> u256;
     fn last_settled_epoch(self: @TContractState) -> u256;
     fn epoch_settled_amounts(self: @TContractState, epoch: u256) -> u256;
+    fn epoch_swap_pool(self: @TContractState, epoch: u256) -> (u256, u256);
 
     // Sync settled epochs state by checking which epochs are fully settled
     // max_epochs_to_check limits how many epochs to check to prevent excessive gas usage

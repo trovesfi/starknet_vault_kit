@@ -1013,6 +1013,10 @@ pub mod RedemptionRouter {
             self.epoch_settled_amounts.read(epoch)
         }
 
+        fn epoch_swap_pool(self: @ContractState, epoch: u256) -> (u256, u256) {
+            self.epoch_swap_pool.read(epoch)
+        }
+
         // Useful when there are many empty epochs.
         // Allows batching their settlement without running out of gas.
         fn sync_settled_epochs(ref self: ContractState, max_epochs_to_check: u256) {
