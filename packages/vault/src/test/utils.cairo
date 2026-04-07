@@ -116,7 +116,7 @@ pub fn deploy_counter() -> (ICounterDispatcher, ClassHash) {
 pub fn deploy_erc20_mock() -> ContractAddress {
     let erc20 = declare("Erc20Mock").unwrap().contract_class();
     let mut calldata = ArrayTrait::new();
-    (WAD * 100).serialize(ref calldata);
+    (WAD * 1000).serialize(ref calldata);
     OWNER().serialize(ref calldata);
     OWNER().serialize(ref calldata);
     let (erc20_address, _) = erc20.deploy(@calldata).unwrap();

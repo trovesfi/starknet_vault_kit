@@ -80,6 +80,7 @@ pub mod mocks {
     pub mod erc20;
     pub mod erc4626;
     pub mod vault;
+    pub mod mock_avnu_exchange;
 }
 
 #[cfg(test)]

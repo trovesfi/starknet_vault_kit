@@ -316,6 +316,38 @@ async function pause(strategy: UniversalStrategy<UniversalStrategySettings>) {
   await Deployer.executeTransactions([pauseCall], acc, provider, 'Pause');
 }
 
+async function deployUsdtFixer() {
+    const provider = config.provider;
+    const calls = await Deployer.prepareMultiDeployContracts([{
+        contract_name: 'UsdtFixer',
+        package_name: VAULT_PACKAGE,
+        constructorData: []
+    }], config, acc);
+    await Deployer.executeDeployCalls(calls, acc, provider);
+}
+
+async function deployRedemptionRouter() {
+    const provider = config.provider;
+    // ! set strategy
+    const strategy = HyperLSTStrategies.find(u => u.name.includes('xtBTC'))!;
+    const calls = await Deployer.prepareMultiDeployContracts([{
+        contract_name: 'RedemptionRouter',
+        package_name: VAULT_PACKAGE,
+        constructorData: [
+            OWNER,
+            strategy.additionalInfo.vaultAddress.address,
+            strategy.additionalInfo.redeemRequestNFT.address,
+            // ! set to_asset
+            Global.getDefaultTokens().find(t => t.symbol === 'tBTC')?.address!,
+            "0x04270219d365d6b017231b52e92b3fb5d7c8378b05e9abc97724537a80e93b0f", // avnu exchange
+            OWNER,
+            "0",
+            uint256.bnToUint256(0) // min subscribe amount
+        ]
+    }], config, acc);
+    await Deployer.executeDeployCalls(calls, acc, provider);
+}
+
 async function unpause(strategy: UniversalStrategy<UniversalStrategySettings>) {
     const provider = config.provider;
     const cls = await provider.getClassAt(strategy.address.address.toString());
@@ -371,7 +403,7 @@ if (require.main === module) {
 
     // deployStrategy();
     // deployAUMOracle("0x437ef1e7d0f100b2e070b7a65cafec0b2be31b0290776da8b4112f5473d8d9")
-    const strategy = HyperLSTStrategies.find(u => u.name.includes('xsBTC'))!;
+    const strategy = HyperLSTStrategies.find(u => u.name.includes('xSTRK'))!;
     // const vaultStrategy = new UniversalStrategy(config, pricer, strategy);
     const vaultStrategy = new UniversalLstMultiplierStrategy(config, pricer, strategy);
     const vaultContracts = {
@@ -380,27 +412,30 @@ if (require.main === module) {
         vaultAllocator: strategy.additionalInfo.vaultAllocator,
         manager: strategy.additionalInfo.manager
     }
+
+    // deployUsdtFixer();
+    // deployRedemptionRouter();
     
     async function setConfig() {
-        await upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
-        await upgrade('VaultAllocator', VAULT_ALLOCATOR_PACKAGE, vaultContracts.vaultAllocator.toString());
-        await upgrade('Manager', VAULT_ALLOCATOR_PACKAGE, vaultContracts.manager.toString());
-        await upgrade('RedeemRequest', VAULT_PACKAGE, vaultContracts.redeemRequest.toString());
+        // await upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
+        // await upgrade('VaultAllocator', VAULT_ALLOCATOR_PACKAGE, vaultContracts.vaultAllocator.toString());
+        // await upgrade('Manager', VAULT_ALLOCATOR_PACKAGE, vaultContracts.manager.toString());
+        // await upgrade('RedeemRequest', VAULT_PACKAGE, vaultContracts.redeemRequest.toString());
         // await configureSettings(vaultContracts);
         // await setManagerRoot(vaultStrategy, ContractAddr.from(RELAYER));
         // await grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
         // await setMaxDelta(vaultStrategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 6));
 
-        // for (let i=0; i < UniversalStrategies.length; i++) {
-        //     const u = UniversalStrategies[i];
-        //     const strategy = new UniversalStrategy(config, pricer, u);
-            // await setManagerRoot(strategy, ContractAddr.from(RELAYER));
+        for (let i=0; i < HyperLSTStrategies.length; i++) {
+            const u = HyperLSTStrategies[i];
+            const strategy = new UniversalLstMultiplierStrategy(config, pricer, u);
+            await setManagerRoot(strategy, ContractAddr.from(RELAYER));
             // await setMaxDelta(strategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 24));
             // await grantRole(u, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
             // await setFeesConfig(strategy);
             // await pause(strategy);
-        //     await unpause(strategy);
-        // }
+            // await unpause(strategy);
+        }
 
         // const netAPY = await vaultStrategy.netAPY();
         // console.log(netAPY);
@@ -415,7 +450,7 @@ if (require.main === module) {
     //     asset: u.depositTokens[0].address.address
     // })))
     // deploySanitizer();
-    // upgrade('Vault', VAULT_PACKAGE, vaultContracts.vault.toString());
+    // upgrade('RedemptionRouter', VAULT_PACKAGE, '0x6ea649f402898f69baf775c1afdd08522c071c640b9c4460192070ec2b96417');
     // grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), '0x2edf4edbed3f839e7f07dcd913e92299898ff4cf0ba532f8c572c66c5b331b2')
     // setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
 }
