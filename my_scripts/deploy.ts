@@ -1,7 +1,9 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { ContractAddr, Deployer, getMainnetConfig, Global, HyperLSTStrategies, PricerFromApi, UNIVERSAL_MANAGE_IDS, UniversalLstMultiplierStrategy, UniversalStrategies, UniversalStrategy, UniversalStrategySettings, VesuAdapter, VesuAmountDenomination, VesuAmountType, VesuModifyPositionCallParams, Web3Number } from '@strkfarm/sdk';
-import { byteArray, CallData, Contract, hash, num, provider, shortString, uint256 } from 'starknet';
+import fs from 'fs';
+import path from 'path';
+import { byteArray, CallData, Contract, extractContractHashes, hash, json, num, provider, shortString, uint256 } from 'starknet';
 import * as CommonSettings from './config.json';
 import { StandardMerkleTree, LeafData } from './merkle';
 
@@ -22,6 +24,40 @@ const VAULT_ALLOCATOR_PACKAGE = 'vault_allocator';
 const SIMPLE_SANITIZER = ContractAddr.from('0x3798dc4f83fdfad199e5236e3656cf2fb79bc50c00504d0dd41522e0f042072');
 const RELAYER = '0x02D6cf6182259ee62A001EfC67e62C1fbc0dF109D2AA4163EB70D6d1074F0173';
 const pricer = new PricerFromApi(config, Global.getDefaultTokens());
+
+interface VaultContractClassHashes {
+  vault: string;
+  redeemRequest: string;
+  vaultAllocator: string;
+  manager: string;
+}
+
+function getTargetReleaseDir() {
+  return path.join(__dirname, '.', 'target', 'release');
+}
+
+function computeClassHashFromTarget(packageName: string, contractName: string): string {
+  const releaseDir = getTargetReleaseDir();
+  const sierraPath = path.join(releaseDir, `${packageName}_${contractName}.contract_class.json`);
+  const casmPath = path.join(releaseDir, `${packageName}_${contractName}.compiled_contract_class.json`);
+
+  const compiledSierra = json.parse(fs.readFileSync(sierraPath).toString('ascii'));
+  const compiledCasm = json.parse(fs.readFileSync(casmPath).toString('ascii'));
+
+  return extractContractHashes({ contract: compiledSierra, casm: compiledCasm }).classHash;
+}
+
+/**
+ * Computes class hashes from local build artifacts in `target/release` (no on-chain calls).
+ */
+export function getVaultContractClassHashesFromTarget(): VaultContractClassHashes {
+  return {
+    vault: computeClassHashFromTarget(VAULT_PACKAGE, 'Vault'),
+    redeemRequest: computeClassHashFromTarget(VAULT_PACKAGE, 'RedeemRequest'),
+    vaultAllocator: computeClassHashFromTarget(VAULT_ALLOCATOR_PACKAGE, 'VaultAllocator'),
+    manager: computeClassHashFromTarget(VAULT_ALLOCATOR_PACKAGE, 'Manager'),
+  };
+}
 
 async function deployStrategy() {
     // prepare vault contract
@@ -152,6 +188,33 @@ async function setManagerRoot(vaultStrategy: UniversalStrategy<UniversalStrategy
     const setRootCall = vaultStrategy.getSetManagerCall(caller);
     const setRootCall2 = vaultStrategy.getSetManagerCall(vaultStrategy.metadata.additionalInfo.manager);
     await Deployer.executeTransactions([setRootCall, setRootCall2], acc, provider, 'Trigger manage');
+}
+
+const CONTRACT_PACKAGE_MAP: Record<string, string> = {
+    Vault: VAULT_PACKAGE,
+    RedeemRequest: VAULT_PACKAGE,
+    UsdtFixer: VAULT_PACKAGE,
+    RedemptionRouter: VAULT_PACKAGE,
+    AumProvider4626: VAULT_PACKAGE,
+    VaultAllocator: VAULT_ALLOCATOR_PACKAGE,
+    Manager: VAULT_ALLOCATOR_PACKAGE,
+    AvnuMiddleware: VAULT_ALLOCATOR_PACKAGE,
+    PriceRouter: VAULT_ALLOCATOR_PACKAGE,
+    SimpleDecoderAndSanitizer: VAULT_ALLOCATOR_PACKAGE,
+    VesuV2SpecificDecoderAndSanitizer: VAULT_ALLOCATOR_PACKAGE,
+};
+
+async function declareContract(contractName: string) {
+    const packageName = CONTRACT_PACKAGE_MAP[contractName];
+    if (!packageName) {
+        throw new Error(
+            `Unknown contract: ${contractName}. Known contracts: ${Object.keys(CONTRACT_PACKAGE_MAP).join(', ')}`
+        );
+    }
+
+    const result = await Deployer.myDeclare(contractName, packageName, config, acc);
+    console.log(`Declared ${contractName}, class hash: ${result.class_hash}`);
+    return result;
 }
 
 async function upgrade(
@@ -429,7 +492,7 @@ if (require.main === module) {
         for (let i=0; i < HyperLSTStrategies.length; i++) {
             const u = HyperLSTStrategies[i];
             const strategy = new UniversalLstMultiplierStrategy(config, pricer, u);
-            await setManagerRoot(strategy, ContractAddr.from(RELAYER));
+            // await setManagerRoot(strategy, ContractAddr.from(RELAYER));
             // await setMaxDelta(strategy, getMaxDelta(200, CommonSettings.vault.default_settings.report_delay * 24));
             // await grantRole(u, hash.getSelectorFromName('ORACLE_ROLE'), strategy.additionalInfo.aumOracle.address);
             // await setFeesConfig(strategy);
@@ -440,7 +503,8 @@ if (require.main === module) {
         // const netAPY = await vaultStrategy.netAPY();
         // console.log(netAPY);
     }
-    setConfig();
+    // setConfig();
+    // console.log(getVaultContractClassHashesFromTarget());
     // configurePriceRouter();
     // deployPriceRouter();
     // deployAvnuMiddleware();
@@ -453,4 +517,6 @@ if (require.main === module) {
     // upgrade('RedemptionRouter', VAULT_PACKAGE, '0x6ea649f402898f69baf775c1afdd08522c071c640b9c4460192070ec2b96417');
     // grantRole(vaultStrategy, hash.getSelectorFromName('ORACLE_ROLE'), '0x2edf4edbed3f839e7f07dcd913e92299898ff4cf0ba532f8c572c66c5b331b2')
     // setMaxDelta(vaultStrategy, getMaxDelta(15, CommonSettings.vault.default_settings.report_delay * 24));
+
+    declareContract('Vault')
 }
