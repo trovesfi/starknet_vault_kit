@@ -64,7 +64,7 @@ pub mod Vault {
     pub const MAX_REDEEM_FEE: u256 = WAD / 1000; // 0.1% - maximum redemption fee
     pub const MAX_MANAGEMENT_FEE: u256 = WAD / 50; // 2% - maximum annual management fee
     pub const MAX_PERFORMANCE_FEE: u256 = WAD / 5; // 20% - maximum performance fee
-    pub const MIN_REPORT_DELAY: u64 = HOUR; // 1 hour - minimum report delay
+    pub const MIN_REPORT_DELAY: u64 = 0; // 0 seconds - minimum report delay
 
     // --- Time Constants ---
     pub const MIN: u64 = 60; // Seconds in a minute
@@ -223,11 +223,17 @@ pub mod Vault {
     #[derive(Drop, starknet::Event)]
     pub enum Event {
         // Component events
+        #[flat]
         ERC20Event: ERC20Component::Event,
+        #[flat]
         ERC4626Event: ERC4626Component::Event,
+        #[flat]
         SRC5Event: SRC5Component::Event,
+        #[flat]
         AccessControlEvent: AccessControlComponent::Event,
+        #[flat]
         UpgradeableEvent: UpgradeableComponent::Event,
+        #[flat]
         PausableEvent: PausableComponent::Event,
         // Vault-specific events
         RedeemRequested: RedeemRequested, // Emitted when a redemption is requested

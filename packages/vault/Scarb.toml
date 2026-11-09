@@ -34,7 +34,7 @@ snforge_std.workspace = true
 [lib]
 
 [[target.starknet-contract]]
-build-external-contracts = ["vault_allocator::vault_allocator::vault_allocator::VaultAllocator", "vault_allocator::mocks::erc20::Erc20Mock", "vault_allocator::mocks::counter::Counter"]
+build-external-contracts = ["vault_allocator::vault_allocator::vault_allocator::VaultAllocator", "vault_allocator::mocks::erc20::Erc20Mock", "vault_allocator::mocks::counter::Counter", "vault_allocator::mocks::mock_avnu_exchange::MockAvnuExchange"]
 allowed-libfuncs-list.name = "experimental"
 sierra = true
 casm = true
