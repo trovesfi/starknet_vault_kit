@@ -599,8 +599,11 @@ pub mod Vault {
             } else {
                 self.redeem_fees.read()
             };
-            let fee_shares = (shares * redeem_fees)
-                / WAD; // Fee calculation: shares * fee_rate / 1e18
+            let fee_shares_num = shares * redeem_fees;
+            let mut fee_shares = fee_shares_num / WAD; // Fee calculation: shares * fee_rate / 1e18
+            if ((fee_shares_num % WAD).is_non_zero()) {
+                fee_shares += 1;
+            }
 
             if (fee_shares.is_non_zero()) {
                 self
@@ -807,8 +810,10 @@ pub mod Vault {
                     Errors::vault_allocator_not_set();
                 }
                 // Deploy all remaining buffer to allocator
-                ERC20ABIDispatcher { contract_address: self.erc4626.asset() }
-                    .transfer(alloc, remaining_buffer);
+                if (remaining_buffer.is_non_zero()) {
+                    ERC20ABIDispatcher { contract_address: self.erc4626.asset() }
+                        .transfer(alloc, remaining_buffer);
+                }
                 self.aum.write(new_aum + remaining_buffer); // Update AUM to include deployed assets
                 self.buffer.write(0); // Buffer is now empty
             } else {
